@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Netflix IMDb Score Plugin",
+  "version": "0.1",
+  "description": "Adds random IMDb scores to Netflix titles.",
+  "content_scripts": [
+    {
+      "matches": ["*://www.netflix.com/*"],
+      "js": ["main.js"]
+    }
+  ]
+}
