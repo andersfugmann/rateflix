@@ -1,6 +1,15 @@
 (executable
  (name main)
+ (modules main)
  (modes js)
  (libraries js_of_ocaml js_of_ocaml-lwt lwt)
+ (preprocess (pps js_of_ocaml-ppx))
+)
+
+(executable
+ (name popup)
+ (modules popup)
+ (modes js)
+ (libraries js_of_ocaml)
  (preprocess (pps js_of_ocaml-ppx))
 )

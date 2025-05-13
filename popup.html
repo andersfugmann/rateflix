@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Netflix IMDb Plugin Settings</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #fafafa;
+      color: #222;
+      min-width: 250px;
+    }
+    h2 {
+      margin-top: 0;
+      color: #e50914;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 6px;
+      margin-bottom: 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 1em;
+    }
+    button {
+      background: #e50914;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 1em;
+      cursor: pointer;
+    }
+    .status {
+      margin-top: 10px;
+      font-size: 0.95em;
+      color: #388e3c;
+    }
+  </style>
+</head>
+<body>
+  <h2>Netflix IMDb Plugin</h2>
+  <form id="apikey-form">
+    <label for="apikey">OMDb API Key</label>
+    <input type="text" id="apikey" name="apikey" placeholder="Enter your OMDb API key" required />
+    <button type="submit">Save</button>
+    <div class="status" id="status"></div>
+  </form>
+  <script src="popup.js"></script>
+</body>
+</html>
