@@ -17,6 +17,20 @@ let has_imdb_overlay (el : Dom_html.element Js.t) : bool =
 let get_score () =
   Lwt.return (Random.float 10.0)
 
+let extract_movie_metadata (el : Dom_html.element Js.t) : (string * string) =
+  (* Try to extract the title and other available info from the element *)
+  let get_text_by_selector selector =
+    let res = Js.Unsafe.meth_call el "querySelector" [|Js.Unsafe.inject (Js.string selector)|] in
+    let res = Js.Unsafe.coerce res in
+    match Js.Opt.to_option (Obj.magic res : Dom_html.element Js.t Js.opt) with
+    | Some node ->
+        let text = Js.Optdef.to_option (Js.Unsafe.get node "innerText") in
+        Option.value ~default:"" text 
+    | None -> ""
+  in
+  let title = get_text_by_selector ".fallback-text, .previewModal--player-titleTreatment-logo, .title-card-container .title-card-title, .title-card .title" in
+  let year = get_text_by_selector ".year, .title-info-metadata-item-year" in
+  (title, year)
 
 let add_score_icon elt =
   Console.console##info __FUNCTION__;
@@ -61,11 +75,17 @@ let process_movie_el (el : Dom_html.element Js.t) =
    It will only be called by the daemon process *)
 let process_all_movies () =
   Console.console##info __FUNCTION__;
-  Dom_html.document##querySelectorAll (Js.string ".title-card")
-  |> Dom.list_of_nodeList
-  |> List.filter ~f:(fun el -> has_imdb_overlay el |> not)
-  |> (fun l -> Console.console##info (Printf.sprintf "Updating movie titles for %d movies" (List.length l)); l)
-  |> fun node_list -> Lwt_list.iter_p process_movie_el node_list
+  let nodes = 
+    Dom_html.document##querySelectorAll (Js.string ".title-card")
+    |>  Dom.list_of_nodeList
+    |> List.filter ~f:(fun el -> has_imdb_overlay el |> not)
+  in  
+  List.map ~f:extract_movie_metadata nodes
+  |> List.iter ~f:(fun (title, year) -> 
+    let s = Printf.sprintf "%s (%s)" title year in
+    Console.console##info (Printf.sprintf "Found movie: %s" s);
+  );
+  Lwt_list.iter_p process_movie_el nodes
 
 let rec daemon condition () =
   let* () = process_all_movies () in
@@ -85,7 +105,6 @@ let observe_dom_changes condition =
     ~attributes:true ~child_list:true ~character_data:true
     ()
   |> ignore
-
 
 let start () =
   Console.console##info "Starting plugin";
