@@ -2,3 +2,4 @@ _build/
 dist/
 *.opam
 .vscode/
+make.log
