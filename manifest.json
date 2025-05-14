@@ -6,7 +6,7 @@
   "content_scripts": [
     {
       "matches": ["*://www.netflix.com/*"],
-      "js": ["main.js"]
+      "js": ["overlay.bc.js"]
     }
   ],
   "action": {

@@ -1,6 +1,6 @@
 (executable
- (name main)
- (modules main)
+ (name overlay)
+ (modules overlay)
  (modes js)
  (libraries js_of_ocaml js_of_ocaml-lwt lwt)
  (preprocess (pps js_of_ocaml-ppx))
