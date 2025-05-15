@@ -1,0 +1,8 @@
+Prefer match clauses over if statements.
+Use modern idiomatic ocaml syntax 'let*' when working with monads
+Use the command 'make build' to test is the code compiles, and parse the output to find errors. This is the same as running 'dune build'
+When adding signatures to functions, prefer the more generic style 'let fun x: 'a -> 'b = fun ...'
+Keep comments short, and don't document obvious arguments or return values
+Perfer using already enabled ppx'es
+Dont use for loops. Find a way to convert results into list and iterate / fold over the list
+Avoid use of reference cells

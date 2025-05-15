@@ -1,0 +1,115 @@
+open Js_of_ocaml
+open StdLabels
+(* Removed unused opens: Js_of_ocaml_lwt, Lwt.Syntax *)
+
+[@@@warning "-39"]
+
+(** Cache entry type: holds a rating (which may be None) and a timestamp *)
+type cache_entry = {
+  rating : string option;[@warning "-39"]
+  timestamp : float; [@warning "-39"]
+} [@@deriving json]
+
+let cache_entry_of_json = Deriving_Json.from_string cache_entry_json
+let cache_entry_to_json = Deriving_Json.to_string cache_entry_json
+
+let (let+) = Option.bind
+let (let*) = Option.map
+
+(** Constants for cache management *)
+let cache_key_prefix = "imdb_rating_cache_"
+let cache_ttl = 60. *. 60. *. 24. *. 7.
+let negative_cache_ttl = 60. *. 60.
+
+(** Debug logging function to console *)
+let log msg =
+  Console.console##log (Js.string msg)
+
+(**
+ * Create a storage key for a movie title
+ * Normalizes the title by converting to lowercase and replacing spaces with underscores
+ *)
+let make_cache_key (title : string) : string =
+  (* Helper to normalize a string by replacing special chars with underscores *)
+  let normalize str =
+    String.map ~f:(function
+      | ' ' | '/' | '\\' | '?' | '&' | ':' -> '_'
+      | c -> c
+    ) str
+  in
+  let normalized = title |> String.lowercase_ascii |> normalize in
+  cache_key_prefix ^ normalized
+
+
+(**
+ * Save a rating to localStorage cache
+ * @param title The movie title
+ * @param rating The rating (Some "8.5") or None if no rating was found
+ *)
+let save_rating ~title ~rating =
+  let storage = Dom_html.window##.localStorage in
+  let key = make_cache_key title in
+  let entry = {
+    rating;
+    timestamp = Unix.gettimeofday ()
+  } in
+  let json_str = cache_entry_to_json entry in
+
+  Js.Optdef.iter storage (fun storage ->
+    storage##setItem (Js.string key) (Js.string json_str);
+    log (Printf.sprintf "Cached %s: %s" title
+      (match rating with Some r -> r | None -> "N/A"))
+  )
+
+let load_rating title =
+  let key = make_cache_key title in
+
+  let result =
+    let+ storage = Dom_html.window##.localStorage |> Js.Optdef.to_option in
+    let+ entry = storage##getItem (Js.string key) |> Js.Opt.to_option in
+    let entry = cache_entry_of_json (Js.to_string entry) in
+    Some entry
+  in
+  match result with
+  | Some entry ->
+    log (Printf.sprintf "Cache hit for %s: %s" title
+           (match entry.rating with Some r -> r | None -> "N/A"));
+      result
+  | None ->
+    log (Printf.sprintf "Cache miss for %s" title);
+    result
+
+let cache_entry_expired ~now = function
+  | { timestamp; rating = None } -> now -. timestamp > negative_cache_ttl
+  | { timestamp; rating = Some _ } -> now -. timestamp > cache_ttl
+
+let clear_cache ~f =
+  match Dom_html.window##.localStorage |> Js.Optdef.to_option with
+  | Some storage ->
+    List.init ~len:(storage##.length) ~f:(fun i -> storage##key i)
+    |> List.filter_map ~f:Js.Opt.to_option
+    |> List.filter ~f:(fun key -> Js.to_string key |> String.starts_with ~prefix:cache_key_prefix)
+    |> List.map ~f:(fun key -> key, Js.Opt.to_option (storage##getItem key))
+    (* Convert into cache entries *)
+    |> List.map ~f:(function
+      | (k, Some v) -> k, Some (cache_entry_of_json (Js.to_string v))
+      | (k, None)   -> k, None
+    )
+    (* Remove valid keys - Remember that negative cache items should live shorter *)
+    |> List.filter_map ~f:(function
+      | (k, Some entry) when f entry -> Some k
+      | (_, Some _) -> None
+      | (k, None) -> Some k
+    )
+    (* Remove the keys *)
+    |> List.iter ~f:(fun key -> storage##removeItem key)
+  | None -> ()
+
+
+let clear_expired_cache () =
+  let f = cache_entry_expired ~now:(Unix.gettimeofday ()) in
+  clear_cache ~f
+
+let clear_cache () =
+  let f _ = true in
+  clear_cache ~f
