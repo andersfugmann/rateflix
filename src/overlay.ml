@@ -14,11 +14,19 @@ let has_imdb_overlay (el : Dom_html.element Js.t) : bool =
   in
   Js.to_bool res
 
-let get_score () =
-  Lwt.return (Random.float 10.0)
+(* This function should take a title as argument, and lookup the title in the cache *)
+let get_rating title =
+  match Lib.Storage.load_rating title with
+  | Some rating ->
+    Console.console##info (Printf.sprintf "Loaded rating from cache: %.1f: %s" rating title);
+    Lwt.return (Some rating)
+  | None ->
+    let rating = Random.float 10.0 in
+    Lib.Storage.save_rating ~title ~rating:(Some rating);
+    Console.console##info (Printf.sprintf "Stored rating in cache: %.1f: %s" rating title);
+    Lwt.return (Some rating)
 
-let extract_movie_metadata (el : Dom_html.element Js.t) : (string * string) =
-
+let extract_movie_metadata el =
   (* Try to extract the title and other available info from the element *)
   let get_text_by_selector selector =
     el##querySelectorAll (Js.string selector)
@@ -28,17 +36,16 @@ let extract_movie_metadata (el : Dom_html.element Js.t) : (string * string) =
     |> function [] -> None | x :: _ -> Some x
   in
   let title = get_text_by_selector ".fallback-text, .previewModal--player-titleTreatment-logo, .title-card-container .title-card-title, .title-card .title" in
-  let year = get_text_by_selector ".year, .title-info-metadata-item-year" in
+  Option.value ~default:"<unknown>" title
 
-  (Option.value ~default:"<unknown>" title, Option.value ~default:"<unknown>" year)
-
-let add_score_icon elt =
+let add_score_icon ~title elt =
   Console.console##info __FUNCTION__;
   let doc = Dom_html.document in
   let span = Dom_html.createSpan doc in
   let span = (span :> Dom_html.element Js.t) in
-  let* score = get_score () in
-  span##.textContent := Js.some (Js.string (Printf.sprintf "%.1f" score));
+  let* rating = get_rating title in
+  let rating = match rating with Some rating -> Printf.sprintf "%.1f" rating | None -> "N/A" in
+  span##.textContent := Js.some (Js.string rating);
   span##.className := Js.string imdb_overlay_class;
   span##.style##.position := Js.string "absolute";
   span##.style##.top := Js.string "8px";
@@ -65,27 +72,20 @@ let add_score_icon elt =
   Dom.appendChild elt span;
   Lwt.return_unit
 
-let process_movie_el (el : Dom_html.element Js.t) =
+let process_movie_el ~title el =
   match has_imdb_overlay el with
   | true -> Lwt.return_unit
-  | false ->
-    add_score_icon el
+  | false -> add_score_icon ~title el
 
 (* We know that this is not called too often.
    It will only be called by the daemon process *)
 let process_all_movies () =
   Console.console##info __FUNCTION__;
-  let nodes =
-    Dom_html.document##querySelectorAll (Js.string ".title-card")
-    |> Dom.list_of_nodeList
-    |> List.filter ~f:(fun el -> has_imdb_overlay el |> not)
-  in
-  List.map ~f:extract_movie_metadata nodes
-  |> List.iter ~f:(fun (title, year) ->
-    let s = Printf.sprintf "%s (%s)" title year in
-    Console.console##info (Printf.sprintf "Found movie: %s" s);
-  );
-  Lwt_list.iter_p process_movie_el nodes
+  Dom_html.document##querySelectorAll (Js.string ".title-card")
+  |> Dom.list_of_nodeList
+  |> List.filter ~f:(fun el -> has_imdb_overlay el |> not)
+  |> List.map ~f:(fun node -> node, extract_movie_metadata node)
+  |> Lwt_list.iter_p (fun (node, title) -> process_movie_el ~title node)
 
 let rec daemon condition () =
   let* () = process_all_movies () in

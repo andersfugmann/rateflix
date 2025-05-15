@@ -2,7 +2,7 @@
  (name overlay)
  (modules overlay)
  (modes js)
- (libraries js_of_ocaml js_of_ocaml-lwt lwt omdb)
+ (libraries js_of_ocaml js_of_ocaml-lwt lwt lib)
  (preprocess (pps js_of_ocaml-ppx))
 )
 
@@ -10,12 +10,12 @@
  (name popup)
  (modules popup)
  (modes js)
- (libraries js_of_ocaml omdb)
+ (libraries js_of_ocaml lib)
  (preprocess (pps js_of_ocaml-ppx))
 )
 
 (library
- (name        omdb)
+ (name        lib)
  (modules     omdb storage)
  (libraries js_of_ocaml js_of_ocaml-lwt lwt unix)
  (preprocess (pps js_of_ocaml-ppx js_of_ocaml-ppx_deriving_json))

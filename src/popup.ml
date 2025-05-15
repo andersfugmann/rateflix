@@ -19,14 +19,14 @@ let () =
            (fun ev ->
               let (_ : Dom_html.submitEvent Js.t) = Js.Unsafe.coerce ev in
               let key = Js.to_string apikey_input##.value |> String.trim in
-              Omdb.save_key key;
+              Lib.Storage.save_key Lib.Omdb.omdb_key key;
               show_status status_div "Api key saved";
               (fun _ -> Js._false)
            )) Js._false
       |> ignore;
 
-      let key = Omdb.load_key () in
+      let key = Lib.Storage.load_key Lib.Omdb.omdb_key in
       Option.iter (fun key ->
-        apikey_input##.value := key;
+        apikey_input##.value := (Js.string key);
         show_status status_div "Api key loaded") key
   | _ -> ()

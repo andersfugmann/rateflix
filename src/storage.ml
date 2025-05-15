@@ -6,7 +6,7 @@ open StdLabels
 
 (** Cache entry type: holds a rating (which may be None) and a timestamp *)
 type cache_entry = {
-  rating : string option;[@warning "-39"]
+  rating : float option;[@warning "-39"]
   timestamp : float; [@warning "-39"]
 } [@@deriving json]
 
@@ -57,27 +57,15 @@ let save_rating ~title ~rating =
 
   Js.Optdef.iter storage (fun storage ->
     storage##setItem (Js.string key) (Js.string json_str);
-    log (Printf.sprintf "Cached %s: %s" title
-      (match rating with Some r -> r | None -> "N/A"))
   )
 
 let load_rating title =
   let key = make_cache_key title in
 
-  let result =
-    let+ storage = Dom_html.window##.localStorage |> Js.Optdef.to_option in
-    let+ entry = storage##getItem (Js.string key) |> Js.Opt.to_option in
-    let entry = cache_entry_of_json (Js.to_string entry) in
-    Some entry
-  in
-  match result with
-  | Some entry ->
-    log (Printf.sprintf "Cache hit for %s: %s" title
-           (match entry.rating with Some r -> r | None -> "N/A"));
-      result
-  | None ->
-    log (Printf.sprintf "Cache miss for %s" title);
-    result
+  let+ storage = Dom_html.window##.localStorage |> Js.Optdef.to_option in
+  let+ entry = storage##getItem (Js.string key) |> Js.Opt.to_option in
+  let entry = cache_entry_of_json (Js.to_string entry) in
+  entry.rating
 
 let cache_entry_expired ~now = function
   | { timestamp; rating = None } -> now -. timestamp > negative_cache_ttl
@@ -113,3 +101,12 @@ let clear_expired_cache () =
 let clear_cache () =
   let f _ = true in
   clear_cache ~f
+
+let save_key key value =
+  let storage = Dom_html.window##.localStorage in
+  Js.Optdef.iter storage (fun storage -> storage##setItem (Js.string key) (Js.string value))
+
+let load_key key =
+  let+ storage = Dom_html.window##.localStorage |> Js.Optdef.to_option in
+  let+ value = storage##getItem (Js.string key) |> Js.Opt.to_option in
+  Some (value |> Js.to_string)

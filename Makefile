@@ -10,11 +10,12 @@ POPUP_HTML=popup.html
 .PHONY: build
 build: ## Build the project
 build:
-	dune build
+	@dune build
 
 .PHONY: dist
 dist: ## Create the installation package directory for Edge
 dist: build
+	@rm -fr $(DIST_DIR)
 	@mkdir -p $(DIST_DIR)
 	@cp _build/default/src/*js $(DIST_DIR)
 	@cp $(MANIFEST) $(DIST_DIR)/
