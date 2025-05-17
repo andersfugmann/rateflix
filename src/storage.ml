@@ -40,12 +40,6 @@ let make_cache_key (title : string) : string =
   let normalized = title |> String.lowercase_ascii |> normalize in
   cache_key_prefix ^ normalized
 
-
-(**
- * Save a rating to localStorage cache
- * @param title The movie title
- * @param rating The rating (Some "8.5") or None if no rating was found
- *)
 let save_rating ~title ~rating =
   let storage = Dom_html.window##.localStorage in
   let key = make_cache_key title in
@@ -61,7 +55,6 @@ let save_rating ~title ~rating =
 
 let load_rating title =
   let key = make_cache_key title in
-
   let+ storage = Dom_html.window##.localStorage |> Js.Optdef.to_option in
   let+ entry = storage##getItem (Js.string key) |> Js.Opt.to_option in
   let entry = cache_entry_of_json (Js.to_string entry) in
@@ -71,7 +64,7 @@ let cache_entry_expired ~now = function
   | { timestamp; rating = None } -> now -. timestamp > negative_cache_ttl
   | { timestamp; rating = Some _ } -> now -. timestamp > cache_ttl
 
-let clear_cache ~f =
+let get_cache_entries () =
   match Dom_html.window##.localStorage |> Js.Optdef.to_option with
   | Some storage ->
     List.init ~len:(storage##.length) ~f:(fun i -> storage##key i)
@@ -83,15 +76,27 @@ let clear_cache ~f =
       | (k, Some v) -> k, Some (cache_entry_of_json (Js.to_string v))
       | (k, None)   -> k, None
     )
-    (* Remove valid keys - Remember that negative cache items should live shorter *)
-    |> List.filter_map ~f:(function
-      | (k, Some entry) when f entry -> Some k
-      | (_, Some _) -> None
-      | (k, None) -> Some k
-    )
-    (* Remove the keys *)
-    |> List.iter ~f:(fun key -> storage##removeItem key)
+  | None -> []
+
+let count_cache_entries () =
+  get_cache_entries () |> List.length
+
+let remove_key key =
+  match Dom_html.window##.localStorage |> Js.Optdef.to_option with
+  | Some storage ->
+    storage##removeItem key
   | None -> ()
+
+
+let clear_cache ~f =
+  get_cache_entries ()
+  |> List.filter_map ~f:(function
+    | (k, Some entry) when f entry -> Some k
+    | (_, Some _) -> None
+    | (k, None) -> Some k
+  )
+  (* Remove the keys *)
+  |> List.iter ~f:remove_key
 
 
 let clear_expired_cache () =
