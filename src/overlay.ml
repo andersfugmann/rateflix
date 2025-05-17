@@ -1,19 +1,18 @@
 open! Js_of_ocaml
 open! Js_of_ocaml_lwt
 open! Lwt.Syntax
+open! Lwt.Infix
 open! StdLabels
 open! ListLabels
-open !MoreLabels
+open! MoreLabels
 (* Unique class to mark overlays and prevent duplicates *)
-let imdb_overlay_class = "imdb-rating-overlay"
+let imdb_overlay_class = ".imdb-rating-overlay"
 
 let has_imdb_overlay (el : Dom_html.element Js.t) : bool =
   let res =
-    Js.Unsafe.meth_call el "querySelector"
-      [|Js.Unsafe.inject (Js.string ("." ^ imdb_overlay_class))|]
-    |> Js.Unsafe.coerce
+    el##querySelector (Js.string imdb_overlay_class)
   in
-  Js.to_bool res
+  Js.Opt.test res
 
 let fetch_imdb_rating =
   let in_progress = Hashtbl.create 19 in
@@ -22,13 +21,14 @@ let fetch_imdb_rating =
     | Some result ->
       begin
         match Lwt.is_sleeping result with
-        | true -> Hashtbl.remove in_progress title
-        | false -> ()
+        | false -> Hashtbl.remove in_progress title
+        | true -> ()
       end;
       result
       (* If the promise has been fulfilled, then remove it from the table *)
     | None ->
-      let result = Lib.Omdb.fetch_imdb_rating ~title in
+      (* let result = Lib.Omdb.fetch_imdb_rating ~title in *)
+      let result = Lwt_js.sleep 5.0 >>= fun () -> Lwt_result.return (Random.float 10.0 |> Option.some) in
       Hashtbl.add in_progress ~key:title ~data:result;
       result
 
@@ -41,19 +41,15 @@ let get_rating title =
   | None ->
     let* result = fetch_imdb_rating ~title in
     match result with
-    | Ok rating_opt ->
-      begin
-        match rating_opt with
-        | Some rating ->
-          Console.console##info (Printf.sprintf "Fetched rating from OMDb: %.1f: %s" rating title);
-          Lib.Storage.save_rating ~title ~rating:(Some rating);
-          Lwt.return (Some rating)
-        | None ->
-          Console.console##info (Printf.sprintf "No rating available for: %s" title);
-          (* Cache the negative result too *)
-          Lib.Storage.save_rating ~title ~rating:None;
-          Lwt.return None
-      end
+    | Ok (Some rating) ->
+      Console.console##info (Printf.sprintf "Fetched rating from OMDb: %.1f: %s" rating title);
+      Lib.Storage.save_rating ~title ~rating:(Some rating);
+      Lwt.return (Some rating)
+    | Ok None ->
+      Console.console##info (Printf.sprintf "No rating available for: %s" title);
+      (* Cache the negative result too *)
+      Lib.Storage.save_rating ~title ~rating:None;
+      Lwt.return None
     | Error err ->
         Console.console##warn (Printf.sprintf "Error fetching rating for %s: %s" title err);
         Lib.Storage.save_rating ~title ~rating:None;
@@ -104,11 +100,6 @@ let add_score_icon ~title elt =
   Dom.appendChild elt span;
   Lwt.return_unit
 
-let process_movie_el ~title el =
-  match has_imdb_overlay el with
-  | true -> Lwt.return_unit
-  | false -> add_score_icon ~title el
-
 (* We know that this is not called too often.
    It will only be called by the daemon process *)
 let process_all_movies () =
@@ -117,13 +108,13 @@ let process_all_movies () =
   |> Dom.list_of_nodeList
   |> List.filter ~f:(fun el -> has_imdb_overlay el |> not)
   |> List.map ~f:(fun node -> node, extract_movie_metadata node)
-  |> Lwt_list.iter_p (fun (node, title) -> process_movie_el ~title node)
+  |> Lwt_list.iter_p (fun (node, title) -> add_score_icon ~title node)
 
 let rec daemon condition () =
   let* () = process_all_movies () in
   let* () = Lwt.pick [
     (Lwt_condition.wait condition);
-    (Lwt_js.sleep 2.0)
+    (Lwt_js.sleep 5.0)
   ]
   in
   daemon condition ()

@@ -7,12 +7,19 @@ let show_status status_div msg =
       (Js.number_of_float 2000.) in
   ()
 
+let update_cache_count count_elem =
+  let count = Lib.Storage.count_cache_entries () in
+  let text = Js.string (string_of_int count) in
+  count_elem##.innerHTML := text
+
 let () =
   let open Dom_html in
   match getElementById_coerce "apikey" CoerceTo.input,
         getElementById_coerce "status" CoerceTo.div,
-        getElementById_coerce "apikey-form" CoerceTo.form with
-  | Some apikey_input, Some status_div, Some form ->
+        getElementById_coerce "apikey-form" CoerceTo.form,
+        getElementById "cache-count",
+        getElementById_coerce "clear-cache" CoerceTo.button with
+  | Some apikey_input, Some status_div, Some form, cache_count, Some clear_btn ->
 
       Dom_html.addEventListener form Dom_html.Event.submit
         (Dom_html.full_handler
@@ -24,6 +31,19 @@ let () =
               (fun _ -> Js._false)
            )) Js._false
       |> ignore;
+
+      Dom_html.addEventListener clear_btn Dom_html.Event.click
+        (Dom_html.handler
+           (fun _ ->
+              Lib.Storage.clear_cache ();  (* Use the no-argument version that clears all cache *)
+              update_cache_count cache_count;
+              show_status status_div "Cache cleared";
+              Js._false
+           )) Js._false
+      |> ignore;
+
+      (* Initialize cache count display *)
+      update_cache_count cache_count;
 
       let key = Lib.Storage.load_key Lib.Omdb.omdb_key in
       Option.iter (fun key ->

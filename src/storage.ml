@@ -88,7 +88,7 @@ let remove_key key =
   | None -> ()
 
 
-let clear_cache ~f =
+let clear_cache_with_predicate ~f =
   get_cache_entries ()
   |> List.filter_map ~f:(function
     | (k, Some entry) when f entry -> Some k
@@ -101,11 +101,11 @@ let clear_cache ~f =
 
 let clear_expired_cache () =
   let f = cache_entry_expired ~now:(Unix.gettimeofday ()) in
-  clear_cache ~f
+  clear_cache_with_predicate ~f
 
 let clear_cache () =
   let f _ = true in
-  clear_cache ~f
+  clear_cache_with_predicate ~f
 
 let save_key key value =
   let storage = Dom_html.window##.localStorage in
@@ -115,3 +115,7 @@ let load_key key =
   let+ storage = Dom_html.window##.localStorage |> Js.Optdef.to_option in
   let+ value = storage##getItem (Js.string key) |> Js.Opt.to_option in
   Some (value |> Js.to_string)
+
+let () =
+  let str = Printf.sprintf "Cache entries: %d\n" (count_cache_entries ()) in
+  log str

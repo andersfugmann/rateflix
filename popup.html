@@ -43,6 +43,23 @@
       font-size: 0.95em;
       color: #388e3c;
     }
+    .cache-info {
+      margin-top: 20px;
+      padding-top: 15px;
+      border-top: 1px solid #eee;
+    }
+    .cache-info p {
+      margin-bottom: 10px;
+      font-size: 0.95em;
+    }
+    #clear-cache {
+      background: #757575;
+      font-size: 0.9em;
+      padding: 6px 12px;
+    }
+    #clear-cache:hover {
+      background: #616161;
+    }
   </style>
 </head>
 <body>
@@ -53,6 +70,12 @@
     <button type="submit">Save</button>
     <div class="status" id="status"></div>
   </form>
+  
+  <div class="cache-info">
+    <p>Cached entries: <span id="cache-count">-</span></p>
+    <button id="clear-cache">Clear Cache</button>
+  </div>
+  
   <script src="popup.bc.js"></script>
 </body>
 </html>
