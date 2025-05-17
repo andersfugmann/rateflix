@@ -3,6 +3,7 @@ open! Js_of_ocaml_lwt
 open! Lwt.Syntax
 open! StdLabels
 open! ListLabels
+open !MoreLabels
 (* Unique class to mark overlays and prevent duplicates *)
 let imdb_overlay_class = "imdb-rating-overlay"
 
@@ -14,6 +15,23 @@ let has_imdb_overlay (el : Dom_html.element Js.t) : bool =
   in
   Js.to_bool res
 
+let fetch_imdb_rating =
+  let in_progress = Hashtbl.create 19 in
+  fun ~title ->
+    match Hashtbl.find_opt in_progress title with
+    | Some result ->
+      begin
+        match Lwt.is_sleeping result with
+        | true -> Hashtbl.remove in_progress title
+        | false -> ()
+      end;
+      result
+      (* If the promise has been fulfilled, then remove it from the table *)
+    | None ->
+      let result = Lib.Omdb.fetch_imdb_rating ~title in
+      Hashtbl.add in_progress ~key:title ~data:result;
+      result
+
 (* This function should take a title as argument, and lookup the title in the cache *)
 let get_rating title =
   match Lib.Storage.load_rating title with
@@ -21,10 +39,25 @@ let get_rating title =
     Console.console##info (Printf.sprintf "Loaded rating from cache: %.1f: %s" rating title);
     Lwt.return (Some rating)
   | None ->
-    let rating = Random.float 10.0 in
-    Lib.Storage.save_rating ~title ~rating:(Some rating);
-    Console.console##info (Printf.sprintf "Stored rating in cache: %.1f: %s" rating title);
-    Lwt.return (Some rating)
+    let* result = fetch_imdb_rating ~title in
+    match result with
+    | Ok rating_opt ->
+      begin
+        match rating_opt with
+        | Some rating ->
+          Console.console##info (Printf.sprintf "Fetched rating from OMDb: %.1f: %s" rating title);
+          Lib.Storage.save_rating ~title ~rating:(Some rating);
+          Lwt.return (Some rating)
+        | None ->
+          Console.console##info (Printf.sprintf "No rating available for: %s" title);
+          (* Cache the negative result too *)
+          Lib.Storage.save_rating ~title ~rating:None;
+          Lwt.return None
+      end
+    | Error err ->
+        Console.console##warn (Printf.sprintf "Error fetching rating for %s: %s" title err);
+        Lib.Storage.save_rating ~title ~rating:None;
+        Lwt.return None
 
 let extract_movie_metadata el =
   (* Try to extract the title and other available info from the element *)
@@ -39,7 +72,6 @@ let extract_movie_metadata el =
   Option.value ~default:"<unknown>" title
 
 let add_score_icon ~title elt =
-  Console.console##info __FUNCTION__;
   let doc = Dom_html.document in
   let span = Dom_html.createSpan doc in
   let span = (span :> Dom_html.element Js.t) in
@@ -89,7 +121,11 @@ let process_all_movies () =
 
 let rec daemon condition () =
   let* () = process_all_movies () in
-  let* () = Lwt_condition.wait condition in
+  let* () = Lwt.pick [
+    (Lwt_condition.wait condition);
+    (Lwt_js.sleep 2.0)
+  ]
+  in
   daemon condition ()
 
 let observe_dom_changes condition =
