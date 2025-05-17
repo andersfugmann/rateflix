@@ -6,13 +6,13 @@ open! StdLabels
 open! ListLabels
 open! MoreLabels
 (* Unique class to mark overlays and prevent duplicates *)
-let imdb_overlay_class = ".imdb-rating-overlay"
+let imdb_overlay_class = "imdb-rating-overlay"
 
-let has_imdb_overlay (el : Dom_html.element Js.t) : bool =
-  let res =
-    el##querySelector (Js.string imdb_overlay_class)
-  in
-  Js.Opt.test res
+let has_imdb_overlay =
+  let query = Js.string ("." ^ imdb_overlay_class) in
+  fun el ->
+    el##querySelector query
+    |> Js.Opt.test
 
 let fetch_imdb_rating =
   let in_progress = Hashtbl.create 19 in
