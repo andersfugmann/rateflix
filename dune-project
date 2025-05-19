@@ -17,6 +17,7 @@
    js_of_ocaml
    js_of_ocaml-lwt
    lwt
+   ppx_deriving_yojson
  )
  (allow_empty)
 )

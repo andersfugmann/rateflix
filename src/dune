@@ -16,7 +16,7 @@
 
 (library
  (name        lib)
- (modules     omdb storage)
+ (modules     omdb storage chrome)
  (libraries js_of_ocaml js_of_ocaml-lwt lwt unix)
- (preprocess (pps js_of_ocaml-ppx js_of_ocaml-ppx_deriving_json))
+ (preprocess (pps js_of_ocaml-ppx ppx_deriving_yojson))
 )

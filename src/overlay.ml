@@ -27,14 +27,15 @@ let fetch_imdb_rating =
       result
       (* If the promise has been fulfilled, then remove it from the table *)
     | None ->
-      (* let result = Lib.Omdb.fetch_imdb_rating ~title in *)
-      let result = Lwt_js.sleep 5.0 >>= fun () -> Lwt_result.return (Random.float 10.0 |> Option.some) in
+      let result = Lib.Omdb.fetch_imdb_rating ~title in
       Hashtbl.add in_progress ~key:title ~data:result;
       result
 
+
 (* This function should take a title as argument, and lookup the title in the cache *)
 let get_rating title =
-  match Lib.Storage.load_rating title with
+  let* rating = Lib.Storage.load_rating title in
+  match rating with
   | Some rating ->
     Console.console##info (Printf.sprintf "Loaded rating from cache: %.1f: %s" rating title);
     Lwt.return (Some rating)
@@ -43,16 +44,16 @@ let get_rating title =
     match result with
     | Ok (Some rating) ->
       Console.console##info (Printf.sprintf "Fetched rating from OMDb: %.1f: %s" rating title);
-      Lib.Storage.save_rating ~title ~rating:(Some rating);
+      let* () = Lib.Storage.save_rating ~title ~rating:(Some rating) in
       Lwt.return (Some rating)
     | Ok None ->
       Console.console##info (Printf.sprintf "No rating available for: %s" title);
       (* Cache the negative result too *)
-      Lib.Storage.save_rating ~title ~rating:None;
+      let* () = Lib.Storage.save_rating ~title ~rating:None in
       Lwt.return None
     | Error err ->
         Console.console##warn (Printf.sprintf "Error fetching rating for %s: %s" title err);
-        Lib.Storage.save_rating ~title ~rating:None;
+        let* () = Lib.Storage.save_rating ~title ~rating:None in
         Lwt.return None
 
 let extract_movie_metadata el =
@@ -64,8 +65,7 @@ let extract_movie_metadata el =
     |> List.filter ~f:(function "" -> false | _ -> true)
     |> function [] -> None | x :: _ -> Some x
   in
-  let title = get_text_by_selector ".fallback-text, .previewModal--player-titleTreatment-logo, .title-card-container .title-card-title, .title-card .title" in
-  Option.value ~default:"<unknown>" title
+  get_text_by_selector ".fallback-text, .previewModal--player-titleTreatment-logo, .title-card-container .title-card-title, .title-card .title"
 
 let add_score_icon ~title elt =
   let doc = Dom_html.document in
@@ -107,7 +107,10 @@ let process_all_movies () =
   Dom_html.document##querySelectorAll (Js.string ".title-card")
   |> Dom.list_of_nodeList
   |> List.filter ~f:(fun el -> has_imdb_overlay el |> not)
-  |> List.map ~f:(fun node -> node, extract_movie_metadata node)
+  |> List.filter_map ~f:(fun node ->
+    match extract_movie_metadata node with
+    | Some title -> Some (node, title)
+    | None -> None)
   |> Lwt_list.iter_p (fun (node, title) -> add_score_icon ~title node)
 
 let rec daemon condition () =

@@ -1,5 +1,7 @@
 open Js_of_ocaml
 open StdLabels
+open Lwt.Syntax
+
 (* Removed unused opens: Js_of_ocaml_lwt, Lwt.Syntax *)
 
 [@@@warning "-39"]
@@ -8,13 +10,10 @@ open StdLabels
 type cache_entry = {
   rating : float option;[@warning "-39"]
   timestamp : float; [@warning "-39"]
-} [@@deriving json]
+} [@@deriving yojson]
 
-let cache_entry_of_json = Deriving_Json.from_string cache_entry_json
-let cache_entry_to_json = Deriving_Json.to_string cache_entry_json
-
-let (let+) = Option.bind
-let (let*) = Option.map
+let cache_entry_of_str str = Yojson.Safe.from_string str |> cache_entry_of_yojson |> Result.get_ok
+let cache_entry_to_str entry = cache_entry_to_yojson entry |> Yojson.Safe.to_string
 
 (** Constants for cache management *)
 let cache_key_prefix = "imdb_rating_cache_"
@@ -24,6 +23,20 @@ let negative_cache_ttl = 60. *. 60.
 (** Debug logging function to console *)
 let log msg =
   Console.console##log (Js.string msg)
+
+let save_key key value =
+  match Chrome.Storage.local_storage () with
+  | Some storage ->
+    Chrome.Storage.set storage ~key ~value
+  | None ->
+    Lwt.return_unit
+
+let load_key key =
+  match Chrome.Storage.local_storage () with
+  | Some storage ->
+    Chrome.Storage.get storage key
+  | None ->
+    Lwt.return_none
 
 (**
  * Create a storage key for a movie title
@@ -41,62 +54,64 @@ let make_cache_key (title : string) : string =
   cache_key_prefix ^ normalized
 
 let save_rating ~title ~rating =
-  let storage = Dom_html.window##.localStorage in
   let key = make_cache_key title in
   let entry = {
     rating;
     timestamp = Unix.gettimeofday ()
   } in
-  let json_str = cache_entry_to_json entry in
-
-  Js.Optdef.iter storage (fun storage ->
-    storage##setItem (Js.string key) (Js.string json_str);
-  )
+  let json_str = cache_entry_to_str entry in
+  save_key key json_str
 
 let load_rating title =
   let key = make_cache_key title in
-  let+ storage = Dom_html.window##.localStorage |> Js.Optdef.to_option in
-  let+ entry = storage##getItem (Js.string key) |> Js.Opt.to_option in
-  let entry = cache_entry_of_json (Js.to_string entry) in
-  entry.rating
+  let* key = load_key key in
+  match key with
+  | None -> Lwt.return_none
+  | Some str ->
+    let entry = cache_entry_of_str str in
+    Lwt.return entry.rating
 
 let cache_entry_expired ~now = function
   | { timestamp; rating = None } -> now -. timestamp > negative_cache_ttl
   | { timestamp; rating = Some _ } -> now -. timestamp > cache_ttl
 
 let get_cache_entries () =
-  match Dom_html.window##.localStorage |> Js.Optdef.to_option with
+  match Chrome.Storage.local_storage () with
   | Some storage ->
-    List.init ~len:(storage##.length) ~f:(fun i -> storage##key i)
-    |> List.filter_map ~f:Js.Opt.to_option
-    |> List.filter ~f:(fun key -> Js.to_string key |> String.starts_with ~prefix:cache_key_prefix)
-    |> List.map ~f:(fun key -> key, Js.Opt.to_option (storage##getItem key))
-    (* Convert into cache entries *)
-    |> List.map ~f:(function
-      | (k, Some v) -> k, Some (cache_entry_of_json (Js.to_string v))
-      | (k, None)   -> k, None
-    )
-  | None -> []
+    let* keys = Chrome.Storage.get_keys_by_prefix storage ~prefix:cache_key_prefix  in
+    let* values =
+      Lwt_list.map_s (fun key ->
+        let* value = Chrome.Storage.get storage key in
+        Lwt.return (key,
+                    match Option.map cache_entry_of_str value with
+                    | Some value -> Some value
+                    | None -> None
+                    | exception _ -> None)
+      ) keys
+    in
+    Lwt.return values
+  | None -> Lwt.return []
 
 let count_cache_entries () =
-  get_cache_entries () |> List.length
+  let* cache_entries = get_cache_entries () in
+  Lwt.return (List.length cache_entries)
 
 let remove_key key =
-  match Dom_html.window##.localStorage |> Js.Optdef.to_option with
+  match Chrome.Storage.local_storage () with
   | Some storage ->
-    storage##removeItem key
-  | None -> ()
-
+    Chrome.Storage.remove storage key
+  | None -> Lwt.return_unit
 
 let clear_cache_with_predicate ~f =
-  get_cache_entries ()
+  let* cache_entries = get_cache_entries () in
+  cache_entries
   |> List.filter_map ~f:(function
     | (k, Some entry) when f entry -> Some k
     | (_, Some _) -> None
     | (k, None) -> Some k
   )
   (* Remove the keys *)
-  |> List.iter ~f:remove_key
+  |> Lwt_list.iter_s remove_key
 
 
 let clear_expired_cache () =
@@ -107,15 +122,13 @@ let clear_cache () =
   let f _ = true in
   clear_cache_with_predicate ~f
 
-let save_key key value =
-  let storage = Dom_html.window##.localStorage in
-  Js.Optdef.iter storage (fun storage -> storage##setItem (Js.string key) (Js.string value))
-
-let load_key key =
-  let+ storage = Dom_html.window##.localStorage |> Js.Optdef.to_option in
-  let+ value = storage##getItem (Js.string key) |> Js.Opt.to_option in
-  Some (value |> Js.to_string)
-
 let () =
-  let str = Printf.sprintf "Cache entries: %d\n" (count_cache_entries ()) in
-  log str
+  let inner =
+    let* count = count_cache_entries () in
+    log @@ Printf.sprintf "Cache entries: %d\n" count;
+    Lwt.return_unit
+  in
+  Lwt.ignore_result inner
+
+let (let+) = Option.bind
+let (let*) = Option.map
