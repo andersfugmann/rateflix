@@ -57,15 +57,26 @@ let get_rating title =
         Lwt.return None
 
 let extract_movie_metadata el =
-  (* Try to extract the title and other available info from the element *)
-  let get_text_by_selector selector =
+  let is_movie el =
+    el##querySelector (Js.string "[class^='mobile-game-title']")
+    |> Js.Opt.test
+  in
+
+  let get_text_by_selector el selector =
     el##querySelectorAll (Js.string selector)
     |> Dom.list_of_nodeList
     |> List.map ~f:(fun node -> Js.Unsafe.get node "innerText")
     |> List.filter ~f:(function "" -> false | _ -> true)
     |> function [] -> None | x :: _ -> Some x
   in
-  get_text_by_selector ".fallback-text, .previewModal--player-titleTreatment-logo, .title-card-container .title-card-title, .title-card .title"
+  let title = get_text_by_selector el ".fallback-text, .previewModal--player-titleTreatment-logo, .title-card-container .title-card-title, .title-card .title" in
+
+  match is_movie el, title with
+  | true, Some title ->
+    Console.console##info (Printf.sprintf "Skip game title: %s" title);
+    None
+  | true, None -> None
+  | false, title -> title
 
 let add_score_icon ~title elt =
   let doc = Dom_html.document in
@@ -115,11 +126,8 @@ let process_all_movies () =
 
 let rec daemon condition () =
   let* () = process_all_movies () in
-  let* () = Lwt.pick [
-    (Lwt_condition.wait condition);
-    (Lwt_js.sleep 5.0)
-  ]
-  in
+  let* () = Lwt_condition.wait condition in
+  let* () = Lwt_js.sleep 2.0 in
   daemon condition ()
 
 let observe_dom_changes condition =
