@@ -101,7 +101,7 @@ let fetch_imdb_rating ~title : (float option, string) Lwt_result.t =
     begin
       let json_str = Js.to_string body in
       try
-        (* Parse the JSON response using our safe deserializer *)
+        (* Parse the JSON response using our safe deserializing *)
         let response = omdb_response_of_json json_str in
         match response.imdbRating with
         | Some rating -> Lwt_result.return (parse_rating rating)
