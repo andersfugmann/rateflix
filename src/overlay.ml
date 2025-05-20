@@ -5,11 +5,46 @@ open! Lwt.Infix
 open! StdLabels
 open! ListLabels
 open! MoreLabels
-(* Unique class to mark overlays and prevent duplicates *)
-let imdb_overlay_class = "imdb-rating-overlay"
+
+(* Cache to hold game titles *)
+let game_titles = Hashtbl.create 10
+(** Add custom CSS for rating badges *)
+let add_custom_styles () =
+  let doc = Dom_html.document in
+  let style = Dom_html.createStyle doc in
+
+  let css = {|
+    .imdb-rating-overlay.preview-rating-badge {
+      width: 32px;
+      height: 32px;
+      font-size: 16px;
+    }
+
+    .imdb-rating-overlay {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 16px;
+      height: 16px;
+      background-color: #F5C518;
+      color: #222;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 9px;
+      z-index: 1000;
+      box-shadow: 0px 2px 8px rgba(0,0,0,0.15);
+    }
+
+  |} in
+
+  Dom.appendChild style (doc##createTextNode (Js.string css));
+  Dom.appendChild doc##.head style
 
 let has_imdb_overlay =
-  let query = Js.string ("." ^ imdb_overlay_class) in
+  let query = Js.string (".imdb-rating-overlay") in
   fun el ->
     el##querySelector query
     |> Js.Opt.test
@@ -57,7 +92,7 @@ let get_rating title =
         Lwt.return None
 
 let extract_movie_metadata el =
-  let is_movie el =
+  let is_game el =
     el##querySelector (Js.string "[class^='mobile-game-title']")
     |> Js.Opt.test
   in
@@ -69,52 +104,59 @@ let extract_movie_metadata el =
     |> List.filter ~f:(function "" -> false | _ -> true)
     |> function [] -> None | x :: _ -> Some x
   in
-  let title = get_text_by_selector el ".fallback-text, .previewModal--player-titleTreatment-logo, .title-card-container .title-card-title, .title-card .title" in
+  let title = get_text_by_selector el ".fallback-text" in
 
-  match is_movie el, title with
+  match is_game el, title  with
   | true, Some title ->
-    Console.console##info (Printf.sprintf "Skip game title: %s" title);
-    None
-  | true, None -> None
-  | false, title -> title
+    Hashtbl.add game_titles ~key:title ~data:();
+    Some title
+  | _, title -> title
 
-let add_score_icon ~title elt =
+
+let add_score_icon ~title ~class_ elt =
   let doc = Dom_html.document in
-  let span = Dom_html.createSpan doc in
-  let span = (span :> Dom_html.element Js.t) in
+  let div = Dom_html.createSpan doc in
   let* rating = get_rating title in
   let rating = match rating with Some rating -> Printf.sprintf "%.1f" rating | None -> "N/A" in
-  span##.textContent := Js.some (Js.string rating);
-  span##.className := Js.string imdb_overlay_class;
-  span##.style##.position := Js.string "absolute";
-  span##.style##.top := Js.string "8px";
-  span##.style##.right := Js.string "8px";
-  span##.style##.width := Js.string "16px";
-  span##.style##.height := Js.string "16px";
-  span##.style##.backgroundColor := Js.string "#FFD600";
-  span##.style##.color := Js.string "#222";
-  span##.style##.borderRadius := Js.string "50%";
-  span##.style##.display := Js.string "flex";
-  let _ = span##.style##setProperty (Js.string "align-items") (Js.string "center") Js.Optdef.empty in
-  let _ = span##.style##setProperty (Js.string "justify-content") (Js.string "center") Js.Optdef.empty in
-  span##.style##.fontWeight := Js.string "bold";
-  span##.style##.fontSize := Js.string "8px";
-  span##.style##.zIndex := Js.string "1000";
-  let _ = span##.style##setProperty (Js.string "box-shadow") (Js.string "0 2px 8px rgba(0,0,0,0.15)") Js.Optdef.empty in
+  div##.textContent := Js.some (Js.string rating);
+  div##.className := Js.string class_;
+
   let parent =
     match Js.Opt.to_option elt##.parentNode with
     | Some p -> (Js.Unsafe.coerce p : Dom_html.element Js.t)
     | None -> elt
   in
-  if parent##.style##.position = Js.string "" then
-    parent##.style##.position := Js.string "relative";
-  Dom.appendChild elt span;
+  let () =
+    match parent##.style##.position |> Js.to_string with
+    | "" -> parent##.style##.position := Js.string "relative";
+    | _ -> ()
+  in
+  Dom.appendChild elt div;
   Lwt.return_unit
+
+let process_hover_tiles () =
+  let title_selector = ".previewModal--boxart" in
+  let hover_selector = ".videoMerchPlayer--boxart-wrapper" in
+
+  Dom_html.document##querySelectorAll (Js.string hover_selector)
+  |> Dom.list_of_nodeList
+  |> List.filter ~f:(fun el -> has_imdb_overlay el |> not)
+  |> List.map ~f:(fun elt ->
+    let title =
+      elt##querySelectorAll (Js.string title_selector)
+      |> Dom.list_of_nodeList
+      |> List.map ~f:(fun el -> Js.Unsafe.get el "alt" |> Js.to_string)
+      |> List.find_opt ~f:(function "" -> false | _ -> true)
+    in
+    elt, title
+  )
+  |> List.filter_map ~f:(function (_, None) -> None | (elt, Some title) -> Some (elt, title))
+  |> List.filter ~f:(fun (_, title) -> not (Hashtbl.mem game_titles title))
+  |> Lwt_list.iter_p (fun (elt, title) -> add_score_icon ~title ~class_:"imdb-rating-overlay preview-rating-badge" elt)
 
 (* We know that this is not called too often.
    It will only be called by the daemon process *)
-let process_all_movies () =
-  Console.console##info __FUNCTION__;
+let process_tiles () =
   Dom_html.document##querySelectorAll (Js.string ".title-card")
   |> Dom.list_of_nodeList
   |> List.filter ~f:(fun el -> has_imdb_overlay el |> not)
@@ -122,34 +164,34 @@ let process_all_movies () =
     match extract_movie_metadata node with
     | Some title -> Some (node, title)
     | None -> None)
-  |> Lwt_list.iter_p (fun (node, title) -> add_score_icon ~title node)
+  |> List.filter ~f:(fun (_, title) -> not (Hashtbl.mem game_titles title))
+  |> Lwt_list.iter_p (fun (node, title) -> add_score_icon ~title ~class_:"imdb-rating-overlay" node)
 
 let rec daemon condition () =
-  let* () = process_all_movies () in
+  let* () = process_tiles () in
+  let* () = process_hover_tiles () in
   let* () = Lwt_condition.wait condition in
   let* () = Lwt_js.sleep 2.0 in
   daemon condition ()
 
 let observe_dom_changes condition =
   (* This should kick the daemon process *)
-  Console.console##info __FUNCTION__;
   let target = Dom_html.document##.body in
   let node = (target :> Dom.node Js.t) in
   let f _records _observer =
-    Console.console##info "Dom changes: Wakeup daemon. ";
     Lwt_condition.signal condition ()
   in
   MutationObserver.observe ~node ~f
-    ~attributes:true ~child_list:true ~character_data:true
+    ~attributes:true ~child_list:true ~subtree:true ~character_data:true
     ()
   |> ignore
 
 let start () =
-  Console.console##info "Starting plugin";
   let condition = Lwt_condition.create () in
   Lwt.async (daemon condition);
   observe_dom_changes condition;
   Lwt.return_unit
 
 let () =
+  add_custom_styles ();
   Lwt.ignore_result (start ())

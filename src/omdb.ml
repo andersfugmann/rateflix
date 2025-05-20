@@ -15,70 +15,10 @@ type omdb_response = {
 } [@@deriving yojson { strict = false }]
 
 
-let json_test = {|
-{
-  "Title": "Manifest",
-  "Year": "2018–2023",
-  "Rated": "TV-14",
-  "Released": "24 Sep 2018",
-  "Runtime": "43 min",
-  "Genre": "Drama, Mystery, Sci-Fi",
-  "Director": "N/A",
-  "Writer": "Jeff Rake",
-  "Actors": "Melissa Roxburgh, Josh Dallas, J.R. Ramirez",
-  "Plot": "When a commercial airliner suddenly reappears after being missing for five years, those aboard must reintegrate into society.",
-  "Language": "English",
-  "Country": "United States",
-  "Awards": "1 win & 6 nominations total",
-  "Poster": "https://m.media-amazon.com/images/M/MV5BMTFlNjg0YjAtYzMwOC00Zjc0LTkwYjAtZmRiYzdjNjcyYjc2XkEyXkFqcGc@._V1_SX300.jpg",
-  "Ratings": [
-    {
-      "Source": "Internet Movie Database",
-      "Value": "7.0/10"
-    }
-  ],
-  "Metascore": "N/A",
-  "imdbRating": "7.0",
-  "imdbVotes": "98,085",
-  "imdbID": "tt8421350",
-  "Type": "series",
-  "totalSeasons": "4",
-  "Response": "True"
-}
-  |}
-
 [@@@warning "+39"]
 
 let omdb_response_of_json str = Yojson.Safe.from_string str |> omdb_response_of_yojson |> Result.get_ok
 let omdb_response_to_json entry = omdb_response_to_yojson entry |> Yojson.Safe.to_string
-
-
-let () =
-  (* Print the result of a converted type! *)
-  try
-    let _ = omdb_response_of_json json_test in
-    Console.console##info "Json parsed ok"
-  with
-  | e -> Console.console##info (Printf.sprintf "Json parse failed: %s" @@ Printexc.to_string e)
-
-let () =
-  try
-    let _ = omdb_response_of_json {| {"Response":"False","Error":"Movie not found!"} |} in
-    Console.console##info "Json2 parsed ok"
-  with
-  | e -> Console.console##info (Printf.sprintf "Json2 parse failed: %s" @@ Printexc.to_string e)
-
-
-let () =
-  let response = {
-    title = Some "Title";
-    year = Some "1999";
-    imdbRating = Some "109.0";
-    imdbID = Some "tt00001";
-    response = "True";
-  } in
-  let str = omdb_response_to_json response in
-  Console.console##info (Printf.sprintf "Json to string: %s" str)
 
 
 let omdb_api_url = "https://www.omdbapi.com/"
