@@ -6,6 +6,22 @@ open! StdLabels
 open! ListLabels
 open! MoreLabels
 
+let debug = false
+
+let log level =
+  let logger level =
+    match level with
+    | `Debug -> fun s -> Console.console##debug s
+    | `Info -> fun s -> Console.console##info s
+    | `Warn -> fun s -> Console.console##warn s
+    | `Error -> fun s -> Console.console##error s
+  in
+  let logger = logger level in
+
+  match debug with
+  | true -> fun fmt -> Printf.ksprintf (fun s -> logger s) fmt
+  | false -> fun fmt -> Printf.ifprintf () fmt
+
 (* Cache to hold game titles *)
 let game_titles = Hashtbl.create 10
 (** Add custom CSS for rating badges *)
@@ -14,10 +30,18 @@ let add_custom_styles () =
   let style = Dom_html.createStyle doc in
 
   let css = {|
-    .imdb-rating-overlay.preview-rating-badge {
+    .imdb-rating-overlay.preview-badge {
       width: 32px;
       height: 32px;
       font-size: 16px;
+    }
+
+    .imdb-rating-overlay.recommendation-badge {
+      width: 24px;
+      height: 24px;
+      font-size: 12px;
+      top: 6px;
+      right: 6px;
     }
 
     .imdb-rating-overlay {
@@ -72,22 +96,22 @@ let get_rating title =
   let* rating = Lib.Storage.load_rating title in
   match rating with
   | Some rating ->
-    Console.console##info (Printf.sprintf "Loaded rating from cache: %.1f: %s" rating title);
+    log `Info "Loaded rating from cache: %.1f: %s" rating title;
     Lwt.return (Some rating)
   | None ->
     let* result = fetch_imdb_rating ~title in
     match result with
     | Ok (Some rating) ->
-      Console.console##info (Printf.sprintf "Fetched rating from OMDb: %.1f: %s" rating title);
+      log `Info "Fetched rating from OMDb: %.1f: %s" rating title;
       let* () = Lib.Storage.save_rating ~title ~rating:(Some rating) in
       Lwt.return (Some rating)
     | Ok None ->
-      Console.console##info (Printf.sprintf "No rating available for: %s" title);
+      log `Info "No rating available for: %s" title;
       (* Cache the negative result too *)
       let* () = Lib.Storage.save_rating ~title ~rating:None in
       Lwt.return None
     | Error err ->
-        Console.console##warn (Printf.sprintf "Error fetching rating for %s: %s" title err);
+        log `Warn "Error fetching rating for %s: %s" title err;
         let* () = Lib.Storage.save_rating ~title ~rating:None in
         Lwt.return None
 
@@ -141,21 +165,36 @@ let process_hover_tiles () =
   Dom_html.document##querySelectorAll (Js.string hover_selector)
   |> Dom.list_of_nodeList
   |> List.filter ~f:(fun el -> has_imdb_overlay el |> not)
-  |> List.map ~f:(fun elt ->
-    let title =
-      elt##querySelectorAll (Js.string title_selector)
-      |> Dom.list_of_nodeList
-      |> List.map ~f:(fun el -> Js.Unsafe.get el "alt" |> Js.to_string)
-      |> List.find_opt ~f:(function "" -> false | _ -> true)
-    in
-    elt, title
+  |> List.filter_map ~f:(fun elt ->
+    elt##querySelectorAll (Js.string title_selector)
+    |> Dom.list_of_nodeList
+    |> List.map ~f:(fun el -> Js.Unsafe.get el "alt" |> Js.to_string)
+    |> List.find_opt ~f:(function "" -> false | _ -> true)
+    |> Option.map (fun title -> elt, title)
   )
-  |> List.filter_map ~f:(function (_, None) -> None | (elt, Some title) -> Some (elt, title))
   |> List.filter ~f:(fun (_, title) -> not (Hashtbl.mem game_titles title))
-  |> Lwt_list.iter_p (fun (elt, title) -> add_score_icon ~title ~class_:"imdb-rating-overlay preview-rating-badge" elt)
+  |> Lwt_list.iter_p (fun (elt, title) ->
+    add_score_icon ~title ~class_:"imdb-rating-overlay preview-badge" elt
+  )
 
-(* We know that this is not called too often.
-   It will only be called by the daemon process *)
+(** Process recommendation tiles and add IMDb rating badges *)
+let process_recommendation_tiles () =
+  let recommendation_selector = ".titleCard--container" in
+  Dom_html.document##querySelectorAll (Js.string recommendation_selector)
+  |> Dom.list_of_nodeList
+  |> List.filter ~f:(fun el -> has_imdb_overlay el |> not )
+  |> List.filter_map ~f:(fun node ->
+    node##getAttribute (Js.string "aria-label")
+    |> Js.Opt.to_option
+    |> Option.map Js.to_string
+    |> Option.map (fun title -> (node, title))
+  )
+  |> List.filter ~f:(fun (_, title) -> not (Hashtbl.mem game_titles title))
+  |> Lwt_list.iter_p (fun (node, title) ->
+      log `Info "Adding rating to recommendation: %s" title;
+      add_score_icon ~title ~class_:"imdb-rating-overlay recommendation-badge" node
+    )
+
 let process_tiles () =
   Dom_html.document##querySelectorAll (Js.string ".title-card")
   |> Dom.list_of_nodeList
@@ -165,13 +204,16 @@ let process_tiles () =
     | Some title -> Some (node, title)
     | None -> None)
   |> List.filter ~f:(fun (_, title) -> not (Hashtbl.mem game_titles title))
-  |> Lwt_list.iter_p (fun (node, title) -> add_score_icon ~title ~class_:"imdb-rating-overlay" node)
+  |> Lwt_list.iter_p (fun (node, title) ->
+    add_score_icon ~title ~class_:"imdb-rating-overlay " node
+  )
 
 let rec daemon condition () =
   let* () = process_tiles () in
   let* () = process_hover_tiles () in
+  let* () = process_recommendation_tiles () in
   let* () = Lwt_condition.wait condition in
-  let* () = Lwt_js.sleep 2.0 in
+  let* () = Lwt_js.sleep 1.0 in
   daemon condition ()
 
 let observe_dom_changes condition =
