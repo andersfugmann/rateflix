@@ -22,8 +22,6 @@ let log level =
   | true -> fun fmt -> Printf.ksprintf (fun s -> logger s) fmt
   | false -> fun fmt -> Printf.ifprintf () fmt
 
-(* Cache to hold game titles *)
-let game_titles = Hashtbl.create 10
 (** Add custom CSS for rating badges *)
 let add_custom_styles () =
   let doc = Dom_html.document in
@@ -68,7 +66,7 @@ let add_custom_styles () =
   Dom.appendChild doc##.head style
 
 let has_imdb_overlay =
-  let query = Js.string (".imdb-rating-overlay") in
+  let query = Js.string ".imdb-rating-overlay" in
   fun el ->
     el##querySelector query
     |> Js.Opt.test
@@ -115,28 +113,6 @@ let get_rating title =
         let* () = Lib.Storage.save_rating ~title ~rating:None in
         Lwt.return None
 
-let extract_movie_metadata el =
-  let is_game el =
-    el##querySelector (Js.string "[class^='mobile-game-title']")
-    |> Js.Opt.test
-  in
-
-  let get_text_by_selector el selector =
-    el##querySelectorAll (Js.string selector)
-    |> Dom.list_of_nodeList
-    |> List.map ~f:(fun node -> Js.Unsafe.get node "innerText")
-    |> List.filter ~f:(function "" -> false | _ -> true)
-    |> function [] -> None | x :: _ -> Some x
-  in
-  let title = get_text_by_selector el ".fallback-text" in
-
-  match is_game el, title  with
-  | true, Some title ->
-    Hashtbl.add game_titles ~key:title ~data:();
-    Some title
-  | _, title -> title
-
-
 let add_score_icon ~title ~class_ elt =
   let doc = Dom_html.document in
   let div = Dom_html.createSpan doc in
@@ -158,59 +134,65 @@ let add_score_icon ~title ~class_ elt =
   Dom.appendChild elt div;
   Lwt.return_unit
 
-let process_hover_tiles () =
-  let title_selector = ".previewModal--boxart" in
-  let hover_selector = ".videoMerchPlayer--boxart-wrapper" in
+let is_game el ~title =
+  let game_titles = Hashtbl.create 10 in
+  let is_mobile_game el =
+    el##querySelector (Js.string "[class^='mobile-game-title']")
+    |> Js.Opt.test
+  in
+  match Hashtbl.mem game_titles title with
+  | false when is_mobile_game el ->
+    Hashtbl.add game_titles ~key:title ~data:();
+    true
+  | false -> false
+  | true -> true
 
-  Dom_html.document##querySelectorAll (Js.string hover_selector)
+
+let process_netflix ?title_selector ~selector ~title_extract_f ~class_ () =
+  Dom_html.document##querySelectorAll (Js.string selector)
   |> Dom.list_of_nodeList
   |> List.filter ~f:(fun el -> has_imdb_overlay el |> not)
   |> List.filter_map ~f:(fun elt ->
-    elt##querySelector (Js.string title_selector)
-    |> Js.Opt.to_option
+    (match title_selector with
+     | None -> Some elt
+     | Some selector -> elt##querySelector (Js.string selector) |> Js.Opt.to_option)
     |> Option.map (fun el ->
-      el##getAttribute (Js.string "alt")
+      title_extract_f el
       |> Js.Opt.to_option
       |> Option.map Js.to_string
     )
     |> Option.join
     |> Option.map (fun title -> elt, title)
   )
-  |> List.filter ~f:(fun (_, title) -> not (Hashtbl.mem game_titles title))
+  |> List.filter ~f:(fun (elt, title) -> not (is_game ~title elt))
   |> Lwt_list.iter_p (fun (elt, title) ->
-    add_score_icon ~title ~class_:"imdb-rating-overlay preview-badge" elt
+    add_score_icon ~title ~class_ elt
   )
+
+let process_hover_tiles () =
+  process_netflix
+    ~title_selector:".previewModal--boxart"
+    ~selector:".videoMerchPlayer--boxart-wrapper"
+    ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "alt"))
+    ~class_:"imdb-rating-overlay preview-badge"
+    ()
+
 
 (** Process recommendation tiles and add IMDb rating badges *)
 let process_recommendation_tiles () =
-  let recommendation_selector = ".titleCard--container" in
-  Dom_html.document##querySelectorAll (Js.string recommendation_selector)
-  |> Dom.list_of_nodeList
-  |> List.filter ~f:(fun el -> has_imdb_overlay el |> not )
-  |> List.filter_map ~f:(fun node ->
-    node##getAttribute (Js.string "aria-label")
-    |> Js.Opt.to_option
-    |> Option.map Js.to_string
-    |> Option.map (fun title -> (node, title))
-  )
-  |> List.filter ~f:(fun (_, title) -> not (Hashtbl.mem game_titles title))
-  |> Lwt_list.iter_p (fun (node, title) ->
-      log `Info "Adding rating to recommendation: %s" title;
-      add_score_icon ~title ~class_:"imdb-rating-overlay recommendation-badge" node
-    )
+  process_netflix
+    ~selector:".titleCard--container"
+    ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "aria-label"))
+    ~class_:"imdb-rating-overlay recommendation-badge"
+    ()
 
 let process_tiles () =
-  Dom_html.document##querySelectorAll (Js.string ".title-card")
-  |> Dom.list_of_nodeList
-  |> List.filter ~f:(fun el -> has_imdb_overlay el |> not)
-  |> List.filter_map ~f:(fun node ->
-    match extract_movie_metadata node with
-    | Some title -> Some (node, title)
-    | None -> None)
-  |> List.filter ~f:(fun (_, title) -> not (Hashtbl.mem game_titles title))
-  |> Lwt_list.iter_p (fun (node, title) ->
-    add_score_icon ~title ~class_:"imdb-rating-overlay " node
-  )
+  process_netflix
+    ~title_selector:".fallback-text"
+    ~selector:".title-card"
+    ~title_extract_f:(fun el -> el##.textContent)
+    ~class_:"imdb-rating-overlay"
+    ()
 
 let rec daemon condition () =
   let* () = process_tiles () in
