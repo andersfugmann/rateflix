@@ -166,10 +166,14 @@ let process_hover_tiles () =
   |> Dom.list_of_nodeList
   |> List.filter ~f:(fun el -> has_imdb_overlay el |> not)
   |> List.filter_map ~f:(fun elt ->
-    elt##querySelectorAll (Js.string title_selector)
-    |> Dom.list_of_nodeList
-    |> List.map ~f:(fun el -> Js.Unsafe.get el "alt" |> Js.to_string)
-    |> List.find_opt ~f:(function "" -> false | _ -> true)
+    elt##querySelector (Js.string title_selector)
+    |> Js.Opt.to_option
+    |> Option.map (fun el ->
+      el##getAttribute (Js.string "alt")
+      |> Js.Opt.to_option
+      |> Option.map Js.to_string
+    )
+    |> Option.join
     |> Option.map (fun title -> elt, title)
   )
   |> List.filter ~f:(fun (_, title) -> not (Hashtbl.mem game_titles title))
