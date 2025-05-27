@@ -6,21 +6,6 @@ open! StdLabels
 open! ListLabels
 open! MoreLabels
 
-let debug = false
-
-let log level =
-  let logger level =
-    match level with
-    | `Debug -> fun s -> Console.console##debug s
-    | `Info -> fun s -> Console.console##info s
-    | `Warn -> fun s -> Console.console##warn s
-    | `Error -> fun s -> Console.console##error s
-  in
-  let logger = logger level in
-
-  match debug with
-  | true -> fun fmt -> Printf.ksprintf (fun s -> logger s) fmt
-  | false -> fun fmt -> Printf.ifprintf () fmt
 
 (** Add custom CSS for rating badges *)
 let add_custom_styles () =
@@ -63,7 +48,8 @@ let add_custom_styles () =
   |} in
 
   Dom.appendChild style (doc##createTextNode (Js.string css));
-  Dom.appendChild doc##.head style
+  Dom.appendChild doc##.head style;
+  Lwt.return_unit
 
 let has_imdb_overlay =
   let query = Js.string ".imdb-rating-overlay" in
@@ -94,22 +80,22 @@ let get_rating title =
   let* rating = Lib.Storage.load_rating title in
   match rating with
   | Some rating ->
-    log `Info "Loaded rating from cache: %.1f: %s" rating title;
+    Lib.Log.log `Info "Loaded rating from cache: %.1f: %s" rating title;
     Lwt.return (Some rating)
   | None ->
     let* result = fetch_imdb_rating ~title in
     match result with
     | Ok (Some rating) ->
-      log `Info "Fetched rating from OMDb: %.1f: %s" rating title;
+      Lib.Log.log `Info "Fetched rating from OMDb: %.1f: %s" rating title;
       let* () = Lib.Storage.save_rating ~title ~rating:(Some rating) in
       Lwt.return (Some rating)
     | Ok None ->
-      log `Info "No rating available for: %s" title;
+      Lib.Log.log `Info "No rating available for: %s" title;
       (* Cache the negative result too *)
       let* () = Lib.Storage.save_rating ~title ~rating:None in
       Lwt.return None
     | Error err ->
-        log `Warn "Error fetching rating for %s: %s" title err;
+        Lib.Log.log `Warn "Error fetching rating for %s: %s" title err;
         let* () = Lib.Storage.save_rating ~title ~rating:None in
         Lwt.return None
 
@@ -194,32 +180,10 @@ let process_tiles () =
     ~class_:"imdb-rating-overlay"
     ()
 
-let rec daemon condition () =
+let process () =
   let* () = process_tiles () in
   let* () = process_hover_tiles () in
   let* () = process_recommendation_tiles () in
-  let* () = Lwt_condition.wait condition in
-  let* () = Lwt_js.sleep 1.0 in
-  daemon condition ()
-
-let observe_dom_changes condition =
-  (* This should kick the daemon process *)
-  let target = Dom_html.document##.body in
-  let node = (target :> Dom.node Js.t) in
-  let f _records _observer =
-    Lwt_condition.signal condition ()
-  in
-  MutationObserver.observe ~node ~f
-    ~attributes:true ~child_list:true ~subtree:true ~character_data:true
-    ()
-  |> ignore
-
-let start () =
-  let condition = Lwt_condition.create () in
-  Lwt.async (daemon condition);
-  observe_dom_changes condition;
   Lwt.return_unit
 
-let () =
-  add_custom_styles ();
-  Lwt.ignore_result (start ())
+let () = Lib.Plugin.start_plugin ~init:add_custom_styles ~add_ratings:process ()

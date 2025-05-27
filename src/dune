@@ -1,6 +1,6 @@
 (executable
- (name overlay)
- (modules overlay)
+ (name netflix)
+ (modules netflix)
  (modes js)
  (libraries js_of_ocaml js_of_ocaml-lwt lwt lib)
  (preprocess (pps js_of_ocaml-ppx))
@@ -16,7 +16,7 @@
 
 (library
  (name        lib)
- (modules     omdb storage chrome)
+ (modules     omdb storage chrome plugin log)
  (libraries js_of_ocaml js_of_ocaml-lwt lwt unix)
  (preprocess (pps js_of_ocaml-ppx ppx_deriving_yojson))
 )
