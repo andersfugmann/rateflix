@@ -2,6 +2,8 @@
  (name netflix)
  (modules netflix)
  (modes js)
+ (js_of_ocaml
+  (flags --opt 3 --target-env browser))
  (libraries js_of_ocaml js_of_ocaml-lwt lwt lib)
  (preprocess (pps js_of_ocaml-ppx))
 )
@@ -10,6 +12,8 @@
  (name popup)
  (modules popup)
  (modes js)
+ (js_of_ocaml
+  (flags --opt 3 --source-map --target-env browser))
  (libraries js_of_ocaml lib)
  (preprocess (pps js_of_ocaml-ppx))
 )
@@ -18,5 +22,7 @@
  (name        lib)
  (modules     omdb storage chrome plugin log)
  (libraries js_of_ocaml js_of_ocaml-lwt lwt unix)
+ (js_of_ocaml
+  (flags --opt 3 --source-map --target-env browser))
  (preprocess (pps js_of_ocaml-ppx ppx_deriving_yojson))
 )
