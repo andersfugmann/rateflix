@@ -1,5 +1,5 @@
 open! Js_of_ocaml
-let debug = false
+let log = true
 
 let log level =
   let logger level =
@@ -11,6 +11,6 @@ let log level =
   in
   let logger = logger level in
 
-  match debug with
+  match log with
   | true -> fun fmt -> Printf.ksprintf (fun s -> logger s) fmt
   | false -> fun fmt -> Printf.ifprintf () fmt

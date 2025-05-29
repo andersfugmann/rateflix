@@ -6,7 +6,6 @@ open! StdLabels
 open! ListLabels
 open! MoreLabels
 
-
 (** Add custom CSS for rating badges *)
 let add_custom_styles () =
   let doc = Dom_html.document in
@@ -41,7 +40,6 @@ let add_custom_styles () =
       justify-content: center;
       font-weight: bold;
       font-size: 9px;
-      z-index: 1000;
       box-shadow: 0px 2px 8px rgba(0,0,0,0.15);
     }
 
@@ -57,52 +55,10 @@ let has_imdb_overlay =
     el##querySelector query
     |> Js.Opt.test
 
-let fetch_imdb_rating =
-  let in_progress = Hashtbl.create 19 in
-  fun ~title ->
-    match Hashtbl.find_opt in_progress title with
-    | Some result ->
-      begin
-        match Lwt.is_sleeping result with
-        | false -> Hashtbl.remove in_progress title
-        | true -> ()
-      end;
-      result
-      (* If the promise has been fulfilled, then remove it from the table *)
-    | None ->
-      let result = Lib.Omdb.fetch_imdb_rating ~title in
-      Hashtbl.add in_progress ~key:title ~data:result;
-      result
-
-
-(* This function should take a title as argument, and lookup the title in the cache *)
-let get_rating title =
-  let* rating = Lib.Storage.load_rating title in
-  match rating with
-  | Some rating ->
-    Lib.Log.log `Info "Loaded rating from cache: %.1f: %s" rating title;
-    Lwt.return (Some rating)
-  | None ->
-    let* result = fetch_imdb_rating ~title in
-    match result with
-    | Ok (Some rating) ->
-      Lib.Log.log `Info "Fetched rating from OMDb: %.1f: %s" rating title;
-      let* () = Lib.Storage.save_rating ~title ~rating:(Some rating) in
-      Lwt.return (Some rating)
-    | Ok None ->
-      Lib.Log.log `Info "No rating available for: %s" title;
-      (* Cache the negative result too *)
-      let* () = Lib.Storage.save_rating ~title ~rating:None in
-      Lwt.return None
-    | Error err ->
-        Lib.Log.log `Warn "Error fetching rating for %s: %s" title err;
-        let* () = Lib.Storage.save_rating ~title ~rating:None in
-        Lwt.return None
-
 let add_score_icon ~title ~class_ elt =
   let doc = Dom_html.document in
   let div = Dom_html.createSpan doc in
-  let* rating = get_rating title in
+  let* rating = Lib.Plugin.get_rating title in
   let rating = match rating with Some rating -> Printf.sprintf "%.1f" rating | None -> "N/A" in
   div##.textContent := Js.some (Js.string rating);
   div##.className := Js.string class_;

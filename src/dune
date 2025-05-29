@@ -3,8 +3,34 @@
  (modules netflix)
  (modes js)
  (js_of_ocaml
-  (flags --opt 3 --target-env browser))
- (libraries js_of_ocaml js_of_ocaml-lwt lwt lib)
+  (flags --opt 3 --no-source-map --enable globaldeadcode --target-env browser --noruntime )
+  (compilation_mode separate)
+ )
+ (libraries js_of_ocaml js_of_ocaml-lwt lib)
+ (preprocess (pps js_of_ocaml-ppx))
+)
+
+(executable
+ (name prime)
+ (modules prime)
+ (modes js)
+ (js_of_ocaml
+  (flags --opt 3 --no-source-map --target-env browser --noruntime)
+  (compilation_mode separate)
+ )
+ (libraries js_of_ocaml js_of_ocaml-lwt lib)
+ (preprocess (pps js_of_ocaml-ppx))
+)
+
+(executable
+ (name hbomax)
+ (modules hbomax)
+ (modes js)
+ (js_of_ocaml
+  (flags --opt 3 --no-source-map --target-env browser --noruntime)
+  (compilation_mode separate)
+ )
+ (libraries js_of_ocaml js_of_ocaml-lwt lib)
  (preprocess (pps js_of_ocaml-ppx))
 )
 
@@ -13,7 +39,9 @@
  (modules popup)
  (modes js)
  (js_of_ocaml
-  (flags --opt 3 --source-map --target-env browser))
+  (flags --opt 3 --no-source-map --target-env browser --noruntime)
+  (compilation_mode separate)
+ )
  (libraries js_of_ocaml lib)
  (preprocess (pps js_of_ocaml-ppx))
 )
@@ -21,8 +49,9 @@
 (library
  (name        lib)
  (modules     omdb storage chrome plugin log)
- (libraries js_of_ocaml js_of_ocaml-lwt lwt unix)
+ (libraries js_of_ocaml js_of_ocaml-lwt)
  (js_of_ocaml
-  (flags --opt 3 --source-map --target-env browser))
+  (flags --opt 3 --no-source-map --target-env browser --noruntime)
+ )
  (preprocess (pps js_of_ocaml-ppx ppx_deriving_yojson))
 )

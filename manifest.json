@@ -7,6 +7,14 @@
     {
       "matches": ["*://www.netflix.com/*"],
       "js": ["netflix.bc.js"]
+    },
+    {
+      "matches": ["*://www.amazon.com/*/video/*", "*://www.primevideo.com/*"],
+      "js": ["prime.bc.js"]
+    },
+    {
+      "matches": ["*://play.max.com/*"],
+      "js": ["hbomax.bc.js"]
     }
   ],
   "action": {

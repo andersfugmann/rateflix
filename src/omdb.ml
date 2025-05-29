@@ -30,11 +30,16 @@ let parse_rating rating_str =
   | n -> Some n
   | exception _ -> None
 
-let fetch_imdb_rating ~title : (float option, string) Lwt_result.t =
+let fetch_imdb_rating ?year title : (float option, string) Lwt_result.t =
   let encodeUri str = str |> Js.string |> Js.encodeURI |> Js.to_string in
   let* api_key = Storage.load_key omdb_key in
   let api_key = Option.get api_key in
-  let url = Printf.sprintf "%s?apikey=%s&t=%s" omdb_api_url (encodeUri api_key) (encodeUri title) in
+  let url =
+    let u = Printf.sprintf "%s?apikey=%s&t=%s" omdb_api_url (encodeUri api_key) (encodeUri title) in
+    match year with
+    | Some year -> Printf.sprintf "%s&y=%d" u year
+    | None -> u
+  in
   let* frame = XmlHttpRequest.perform_raw ~response_type:Text url in
   match frame with
   | { code = 200; content = body; _ } ->

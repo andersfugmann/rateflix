@@ -20,9 +20,10 @@ let cache_key_prefix = "imdb_rating_cache_"
 let cache_ttl = 60. *. 60. *. 24. *. 7.
 let negative_cache_ttl = 60. *. 60.
 
-(** Debug logging function to console *)
-let log msg =
-  Console.console##log (Js.string msg)
+let gettimeofday () =
+  let date = new%js Js.date_now in
+  let time = date##getTime in
+  Js.to_float time
 
 let save_key key value =
   match Chrome.Storage.local_storage () with
@@ -41,8 +42,9 @@ let load_key key =
 (**
  * Create a storage key for a movie title
  * Normalizes the title by converting to lowercase and replacing spaces with underscores
- *)
-let make_cache_key (title : string) : string =
+*)
+
+let make_cache_key ?year title =
   (* Helper to normalize a string by replacing special chars with underscores *)
   let normalize str =
     String.map ~f:(function
@@ -51,29 +53,35 @@ let make_cache_key (title : string) : string =
     ) str
   in
   let normalized = title |> String.lowercase_ascii |> normalize in
-  cache_key_prefix ^ normalized
+  let year = match year with
+    | Some y -> Printf.sprintf "__%d" y
+    | None -> ""
+  in
+  Printf.sprintf "%s%s:%s" cache_key_prefix normalized year
 
 let save_rating ~title ~rating =
   let key = make_cache_key title in
   let entry = {
     rating;
-    timestamp = Unix.gettimeofday ()
+    timestamp = gettimeofday ()
   } in
   let json_str = cache_entry_to_str entry in
   save_key key json_str
 
-let load_rating title =
-  let key = make_cache_key title in
+let cache_entry_expired ~now = function
+  | { timestamp; rating = None } -> now -. timestamp > negative_cache_ttl
+  | { timestamp; rating = Some _ } -> now -. timestamp > cache_ttl
+
+let load_rating ?year title =
+  let key = make_cache_key ?year title in
   let* key = load_key key in
   match key with
   | None -> Lwt.return_none
   | Some str ->
     let entry = cache_entry_of_str str in
-    Lwt.return entry.rating
-
-let cache_entry_expired ~now = function
-  | { timestamp; rating = None } -> now -. timestamp > negative_cache_ttl
-  | { timestamp; rating = Some _ } -> now -. timestamp > cache_ttl
+    match cache_entry_expired ~now:(gettimeofday ()) entry with
+    | true -> Lwt.return_none
+    | false -> Lwt.return entry.rating
 
 let get_cache_entries () =
   match Chrome.Storage.local_storage () with
@@ -110,12 +118,11 @@ let clear_cache_with_predicate ~f =
     | (_, Some _) -> None
     | (k, None) -> Some k
   )
-  (* Remove the keys *)
   |> Lwt_list.iter_s remove_key
 
 
 let clear_expired_cache () =
-  let f = cache_entry_expired ~now:(Unix.gettimeofday ()) in
+  let f = cache_entry_expired ~now:(gettimeofday ()) in
   clear_cache_with_predicate ~f
 
 let clear_cache () =
@@ -125,10 +132,7 @@ let clear_cache () =
 let () =
   let inner =
     let* count = count_cache_entries () in
-    log @@ Printf.sprintf "Cache entries: %d\n" count;
+    Log.log `Info "Cache entries: %d\n" count;
     Lwt.return_unit
   in
   Lwt.ignore_result inner
-
-let (let+) = Option.bind
-let (let*) = Option.map

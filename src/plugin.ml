@@ -6,6 +6,48 @@ open! StdLabels
 open! ListLabels
 open! MoreLabels
 
+let fetch_imdb_rating =
+  let in_progress = Hashtbl.create 19 in
+  fun ?year title ->
+    match Hashtbl.find_opt in_progress (title, year) with
+    | Some result ->
+      begin
+        match Lwt.is_sleeping result with
+        | false -> Hashtbl.remove in_progress (title, year)
+        | true -> ()
+      end;
+      result
+      (* If the promise has been fulfilled, then remove it from the table *)
+    | None ->
+      let result = Omdb.fetch_imdb_rating ?year title in
+      Hashtbl.add in_progress ~key:(title, year) ~data:result;
+      result
+
+
+let get_rating ?year title =
+  let* rating = Storage.load_rating ?year title in
+  match rating with
+  | Some rating ->
+    Log.log `Info "Loaded rating from cache: %.1f: %s" rating title;
+    Lwt.return (Some rating)
+  | None ->
+    let* result = fetch_imdb_rating ?year title in
+    match result with
+    | Ok (Some rating) ->
+      Log.log `Info "Fetched rating from OMDb: %.1f: %s" rating title;
+      let* () = Storage.save_rating ~title ~rating:(Some rating) in
+      Lwt.return (Some rating)
+    | Ok None ->
+      Log.log `Info "No rating available for: %s" title;
+      (* Cache the negative result too *)
+      let* () = Storage.save_rating ~title ~rating:None in
+      Lwt.return None
+    | Error err ->
+        Log.log `Warn "Error fetching rating for %s: %s" title err;
+        let* () = Storage.save_rating ~title ~rating:None in
+        Lwt.return None
+
+
 let rec daemon ~f condition () =
   let* () = f () in
   let* () = Lwt_condition.wait condition in
