@@ -1,5 +1,5 @@
 open! Js_of_ocaml
-let log = true
+let log = false
 
 let log level =
   let logger level =
