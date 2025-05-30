@@ -46,6 +46,7 @@ let add_custom_styles () =
       justify-content: center;
       font-weight: bold;
       box-shadow: 0px 2px 8px rgba(0,0,0,0.15);
+      z-index: 1000;
     }
 
   |} in
@@ -54,7 +55,18 @@ let add_custom_styles () =
   Dom.appendChild doc##.head style;
   ()
 
-let add_rating_badge ~size ~rating elt =
+let rec get_parent: level:int -> Dom_html.element Js.t -> Dom_html.element Js.t = fun  ~level elt ->
+  match level with
+  | 0 -> elt
+  | _ ->
+    let parent =
+      match elt##.parentNode |> Js.Opt.to_option with
+      | None -> elt
+      | Some parent -> parent |> Js.Unsafe.coerce
+    in
+    get_parent ~level:(level - 1) parent
+
+let add_rating_badge ?(level = 0) ?(delete_level = 0) ~size ~rating elt =
   let class_name =
     let size = match size with
       | `Regular -> "regular"
@@ -63,25 +75,34 @@ let add_rating_badge ~size ~rating elt =
     in
     Printf.sprintf "imdb-rating-overlay %s-badge" size
   in
+  let elt = get_parent ~level elt in
+  let _parent = get_parent ~level:1 elt in
+
   let rating_text = match rating with
     | Some rating -> Printf.sprintf "%.1f" rating
     | None -> "--"
   in
+  (* Can we remove an element all together? *)
   let doc = Dom_html.document in
   let div = Dom_html.createSpan doc in
   div##.textContent := Js.some (Js.string rating_text);
   div##.className := Js.string class_name;
   let () =
-    let parent =
-      match Js.Opt.to_option elt##.parentNode with
-      | Some p -> (Js.Unsafe.coerce p : Dom_html.element Js.t)
-      | None -> elt
-    in
-    match parent##.style##.position |> Js.to_string with
-    | "" -> parent##.style##.position := Js.string "relative";
+    match elt##.style##.position |> Js.to_string with
+    | "" -> elt##.style##.position := Js.string "relative";
     | _ -> ()
   in
   Dom.appendChild elt div;
+
+  let () =
+    match rating with
+    | Some rating when rating < 3.0 ->
+      Log.log `Info "Removing tile with low score";
+      let elt = get_parent ~level:delete_level elt in
+      let parent = get_parent ~level:1 elt in
+      parent##removeChild (Js.Unsafe.coerce elt) |> ignore
+    | _ -> ()
+  in
   ()
 
 

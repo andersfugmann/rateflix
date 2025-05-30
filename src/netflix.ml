@@ -7,9 +7,9 @@ open! ListLabels
 open! MoreLabels
 open Lib
 
-let add_score_icon ~title ~size elt =
+let add_score_icon ?level ?delete_level ~title ~size elt =
   let* rating = Lib.Plugin.get_rating title in
-  Plugin.add_rating_badge ~rating ~size elt;
+  Plugin.add_rating_badge ?level ?delete_level ~rating ~size elt;
   Lwt.return_unit
 
 let is_game el ~title =
@@ -26,7 +26,7 @@ let is_game el ~title =
   | true -> true
 
 
-let process_netflix ?title_selector ~selector ~title_extract_f ~size () =
+let process ?title_selector ?level ?delete_level ~selector ~title_extract_f ~size () =
   Dom_html.document##querySelectorAll (Js.string selector)
   |> Dom.list_of_nodeList
   |> List.filter ~f:(fun el -> Plugin.has_imdb_overlay el |> not)
@@ -44,38 +44,49 @@ let process_netflix ?title_selector ~selector ~title_extract_f ~size () =
   )
   |> List.filter ~f:(fun (elt, title) -> not (is_game ~title elt))
   |> Lwt_list.iter_p (fun (elt, title) ->
-    add_score_icon ~title ~size elt
+    add_score_icon ?level ?delete_level ~title ~size elt
   )
 
+(* Adding makes it unhover. Need to fix that! *)
 let process_hover_tiles () =
-  process_netflix
-    ~title_selector:".previewModal--boxart"
+  process
     ~selector:".videoMerchPlayer--boxart-wrapper"
+    ~title_selector:".previewModal--boxart"
     ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "alt"))
     ~size:`Medium
+    ~delete_level:2
     ()
 
-
-(** Process recommendation tiles and add IMDb rating badges *)
-let process_recommendation_tiles () =
-  process_netflix
-    ~selector:".titleCard--container"
-    ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "aria-label"))
+let process_details () =
+  process
+    ~selector:".videoMerchPlayer--boxart-wrapper"
+    ~title_selector:".previewModal--boxart"
+    ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "alt"))
     ~size:`Large
     ()
 
+let process_recommendations () =
+  process
+    (* Not really sure why the rating wont show. Its placed on top IIUC. *)
+    ~selector:".titleCard--container"
+    ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "aria-label"))
+    ~size:`Regular
+    ()
+
 let process_tiles () =
-  process_netflix
-    ~title_selector:".fallback-text"
+  process
     ~selector:".title-card"
+    ~title_selector:".fallback-text"
     ~title_extract_f:(fun el -> el##.textContent)
     ~size:`Regular
+    ~delete_level:1
     ()
 
 let process () =
   let* () = process_tiles () in
+  let* () = process_recommendations () in
   let* () = process_hover_tiles () in
-  let* () = process_recommendation_tiles () in
+  let* () = process_details () in
   Lwt.return_unit
 
 let () = Lib.Plugin.start_plugin ~add_ratings:process ()

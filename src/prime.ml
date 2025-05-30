@@ -27,14 +27,14 @@ let parse_title =
       | _ ->
         title, None
 
-let add_score_icon ~title ~size elt =
+let add_score_icon ~level ~title ~size elt =
   let parsed_title, year = parse_title title in
   let* rating = Plugin.get_rating ?year parsed_title in
   Log.log `Info "Add rating for %s: %.1f" title (Option.value ~default:0.0 rating);
-  Plugin.add_rating_badge ~size ~rating elt;
+  Plugin.add_rating_badge ~level ~size ~rating elt;
   Lwt.return_unit
 
-let process_elements ~selector ~size () =
+let process_elements ~selector ~size ~level () =
   Dom_html.document##querySelectorAll (Js.string selector)
   |> Dom.list_of_nodeList
   |> List.filter ~f:(fun elt -> Plugin.has_imdb_overlay elt |> not)
@@ -46,22 +46,26 @@ let process_elements ~selector ~size () =
     |> Option.map (fun title -> elt, Js.to_string title)
   )
   |> Lwt_list.iter_p (fun (elt, title) ->
-    add_score_icon ~title ~size elt
+    add_score_icon ~level ~title ~size elt
   )
 
+(* To delete, delete the parent (i.e. two steps up) *)
+(* Maybe relay this info to process elements? *)
 let process_tiles =
   process_elements
-    ~selector:"[data-testid='card-section']"
+    ~level:0
+    ~selector:"[data-testid='card']"
     ~size:`Regular
 
 
 let process_carousel =
   process_elements
-    ~selector:"[data-testid='super-carousel-card']"
+    ~selector:"[data-testid='super-carousel-card'], [data-testid='intermission-hero-card']"
     ~size:`Large
-
+    ~level:0
 
 (* Main processing function that runs on every iteration *)
+
 let process () =
   let* () = process_tiles () in
   let* () = process_carousel () in
