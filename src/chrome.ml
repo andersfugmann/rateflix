@@ -84,16 +84,10 @@ module Storage = struct
     else
       None
 
-  (** Convert an OCaml string to a JS string *)
-  let js_string = Js.string
-
-  (** Convert a JS string to an OCaml string *)
-  let to_string = Js.to_string
-
   (** Set a string value in chrome.storage.local *)
   let set storage ~key ~value =
     let result = Lwt_mvar.create_empty () in
-    let obj = Js.Unsafe.obj [| (key, Js.Unsafe.inject (js_string value)) |] in
+    let obj = Js.Unsafe.obj [| (key, Js.Unsafe.inject (Js.string value)) |] in
     storage##set
       obj
       (Js.wrap_callback (fun () ->
@@ -106,14 +100,14 @@ module Storage = struct
     let result = Lwt_mvar.create_empty () in
     let return v = Lwt.ignore_result (Lwt_mvar.put result v) in
     storage##get
-      (Js.Unsafe.inject (js_string key))
+      (Js.Unsafe.inject (Js.string key))
       (Js.wrap_callback (fun result ->
          try
            let value = Js.Unsafe.get result key in
            match Js.Optdef.to_option value with
            | None -> return None
            | Some js_value ->
-             let string_value = to_string (Js.Unsafe.coerce js_value) in
+             let string_value = Js.to_string (Js.Unsafe.coerce js_value) in
              return (Some string_value)
          with _ ->
            (** Maybe log an error here *)
@@ -125,7 +119,7 @@ module Storage = struct
   let remove storage key =
     let result = Lwt_mvar.create_empty () in
     storage##remove
-      (Js.Unsafe.inject (js_string key))
+      (Js.Unsafe.inject (Js.string key))
       (Js.wrap_callback (fun () ->
          Lwt.ignore_result (Lwt_mvar.put result ())
        ));
@@ -143,7 +137,7 @@ module Storage = struct
   let set_batch storage items =
     let result = Lwt_mvar.create_empty () in
     let obj_items = Array.of_list
-        (List.map ~f:(fun (k, v) -> (k, Js.Unsafe.inject (js_string v))) items) in
+        (List.map ~f:(fun (k, v) -> (k, Js.Unsafe.inject (Js.string v))) items) in
     let obj = Js.Unsafe.obj obj_items in
     storage##set
       obj
@@ -173,4 +167,5 @@ module Storage = struct
            Lwt.ignore_result (Lwt_mvar.put res [])
        ));
     Lwt_mvar.take res
+
 end

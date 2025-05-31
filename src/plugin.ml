@@ -6,6 +6,7 @@ open! StdLabels
 open! ListLabels
 open! MoreLabels
 
+
 (** Add custom CSS for rating badges *)
 let add_custom_styles () =
   let doc = Dom_html.document in
@@ -80,32 +81,6 @@ let rec get_parent: level:int -> Dom_html.element Js.t -> Dom_html.element Js.t 
     get_parent ~level:(level - 1) parent
 
 
-let calculate_transparency rating =
-  let open Float in
-
-  let clamp ~lower ~upper = function
-    | v when v < lower -> lower
-    | v when v > upper -> upper
-    | v -> v
-  in
-
-  let beta = 1.3 in
-  let low = 3.0 in
-  let high = 7.0 in
-  let max = 0.9 in
-
-  let ( / ) = div in
-  let ( - ) = sub in
-  let ( ^ ) = pow in
-
-  let scale =
-    (rating - low) / (high - low)
-    |> clamp ~lower:0.0 ~upper:1.0
-  in
-  max - (scale ^ beta)
-  |> clamp ~lower:0.0 ~upper:1.0
-
-
 let add_rating_badge ~size ~rating elt =
   let class_name =
     let size = match size with
@@ -132,11 +107,11 @@ let add_rating_badge ~size ~rating elt =
   Dom.appendChild elt div;
 
   Option.iter (fun rating ->
-    let transparency = calculate_transparency rating in
+    let transparency = Transparency.(calculate default rating) in
     let div = Dom_html.createSpan doc in
     div##.className := (Js.string "movie overlay");
     div##setAttribute (Js.string "imdb-rating") (Js.string rating_text);
-    div##.style##setProperty (Js.string "--transparency") (Js.string (Printf.sprintf "%.1f" transparency)) Js.Optdef.empty |> ignore;
+    div##.style##setProperty (Js.string "--transparency") (Js.string (Printf.sprintf "%.5f" transparency)) Js.Optdef.empty |> ignore;
     Dom.appendChild elt div
   ) rating;
   ()
@@ -169,17 +144,17 @@ let get_rating ?year title =
   let* rating = Storage.load_rating ?year title in
   match rating with
   | Some rating ->
-    Log.log `Info "Loaded rating from cache: %.1f: %s" rating title;
+    Log.log `Debug "Loaded rating from cache: %.1f: %s" rating title;
     Lwt.return (Some rating)
   | None ->
     let* result = fetch_imdb_rating ?year title in
     match result with
     | Ok (Some rating) ->
-      Log.log `Info "Fetched rating from OMDb: %.1f: %s" rating title;
+      Log.log `Debug "Fetched rating from OMDb: %.1f: %s" rating title;
       let* () = Storage.save_rating ~title ~rating:(Some rating) in
       Lwt.return (Some rating)
     | Ok None ->
-      Log.log `Info "No rating available for: %s" title;
+      Log.log `Debug "No rating available for: %s" title;
       (* Cache the negative result too *)
       let* () = Storage.save_rating ~title ~rating:None in
       Lwt.return None
@@ -215,4 +190,5 @@ let start ~add_ratings () =
   Lwt.return_unit
 
 let start_plugin ~add_ratings () =
+  Transparency.listen ();
   Lwt.ignore_result (start ~add_ratings ())

@@ -1,6 +1,8 @@
 open! Js_of_ocaml
 let log = false
 
+(* Enable different levels *)
+
 let log level =
   let logger level =
     match level with
@@ -11,6 +13,6 @@ let log level =
   in
   let logger = logger level in
 
-  match log with
-  | true -> fun fmt -> Printf.ksprintf (fun s -> logger s) fmt
-  | false -> fun fmt -> Printf.ifprintf () fmt
+  match log, level with
+  | false, `Debug -> fun fmt -> Printf.ifprintf () fmt
+  | _ -> fun fmt -> Printf.ksprintf (fun s -> logger s) fmt

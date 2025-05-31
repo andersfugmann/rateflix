@@ -31,7 +31,7 @@ let parse_title =
 let add_score_icon ~title ~size elt =
   let parsed_title, year = parse_title title in
   let* rating = Plugin.get_rating ?year parsed_title in
-  Log.log `Info "Add rating for %s: %.1f" title (Option.value ~default:0.0 rating);
+  Log.log `Debug "Add rating for %s: %.1f" title (Option.value ~default:0.0 rating);
   Plugin.add_rating_badge ~size ~rating elt;
   Lwt.return_unit
 
