@@ -92,19 +92,18 @@ let calculate_transparency rating =
   let beta = 1.3 in
   let low = 3.0 in
   let high = 7.0 in
-  let min = 0.1 in
+  let max = 0.9 in
 
-  let ( + ) = add in
   let ( / ) = div in
   let ( - ) = sub in
-  (* let ( * ) = mul in *)
   let ( ^ ) = pow in
 
   let scale =
     (rating - low) / (high - low)
     |> clamp ~lower:0.0 ~upper:1.0
   in
-  scale ^ beta + min
+  max - (scale ^ beta)
+  |> clamp ~lower:0.0 ~upper:1.0
 
 
 let add_rating_badge ~size ~rating elt =
@@ -136,7 +135,7 @@ let add_rating_badge ~size ~rating elt =
     let transparency = calculate_transparency rating in
     let div = Dom_html.createSpan doc in
     div##.className := (Js.string "movie overlay");
-    div##setAttribute (Js.string "imdb-rating ") (Js.string rating_text);
+    div##setAttribute (Js.string "imdb-rating") (Js.string rating_text);
     div##.style##setProperty (Js.string "--transparency") (Js.string (Printf.sprintf "%.1f" transparency)) Js.Optdef.empty |> ignore;
     Dom.appendChild elt div
   ) rating;
