@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Netflix IMDb Score Plugin",
+  "name": "StreamRate",
   "version": "0.1",
-  "description": "Adds random IMDb scores to Netflix titles.",
+  "description": "Adds IMDb scores to streaming services using omdb",
   "content_scripts": [
     {
       "matches": ["*://www.netflix.com/*"],

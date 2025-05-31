@@ -47,9 +47,22 @@ let add_custom_styles () =
       font-weight: bold;
       box-shadow: 0px 2px 8px rgba(0,0,0,0.15);
       z-index: 1000;
+      pointer-events: none;
     }
 
-  |} in
+    .movie.overlay {
+      position: absolute;
+      border-radius: 0%;
+      top: 0%;
+      left: 0%;
+      height: 100%;
+      width: 100%;
+      background: rgba(12, 52, 64, var(--transparency));
+      pointer-events: none;
+    }
+
+  |}
+  in
 
   Dom.appendChild style (doc##createTextNode (Js.string css));
   Dom.appendChild doc##.head style;
@@ -66,7 +79,35 @@ let rec get_parent: level:int -> Dom_html.element Js.t -> Dom_html.element Js.t 
     in
     get_parent ~level:(level - 1) parent
 
-let add_rating_badge ?(level = 0) ?(delete_level = 0) ~size ~rating elt =
+
+let calculate_transparency rating =
+  let open Float in
+
+  let clamp ~lower ~upper = function
+    | v when v < lower -> lower
+    | v when v > upper -> upper
+    | v -> v
+  in
+
+  let beta = 1.3 in
+  let low = 3.0 in
+  let high = 7.0 in
+  let min = 0.1 in
+
+  let ( + ) = add in
+  let ( / ) = div in
+  let ( - ) = sub in
+  (* let ( * ) = mul in *)
+  let ( ^ ) = pow in
+
+  let scale =
+    (rating - low) / (high - low)
+    |> clamp ~lower:0.0 ~upper:1.0
+  in
+  scale ^ beta + min
+
+
+let add_rating_badge ~size ~rating elt =
   let class_name =
     let size = match size with
       | `Regular -> "regular"
@@ -75,9 +116,6 @@ let add_rating_badge ?(level = 0) ?(delete_level = 0) ~size ~rating elt =
     in
     Printf.sprintf "imdb-rating-overlay %s-badge" size
   in
-  let elt = get_parent ~level elt in
-  let _parent = get_parent ~level:1 elt in
-
   let rating_text = match rating with
     | Some rating -> Printf.sprintf "%.1f" rating
     | None -> "--"
@@ -94,15 +132,14 @@ let add_rating_badge ?(level = 0) ?(delete_level = 0) ~size ~rating elt =
   in
   Dom.appendChild elt div;
 
-  let () =
-    match rating with
-    | Some rating when rating < 3.0 ->
-      Log.log `Info "Removing tile with low score";
-      let elt = get_parent ~level:delete_level elt in
-      let parent = get_parent ~level:1 elt in
-      parent##removeChild (Js.Unsafe.coerce elt) |> ignore
-    | _ -> ()
-  in
+  Option.iter (fun rating ->
+    let transparency = calculate_transparency rating in
+    let div = Dom_html.createSpan doc in
+    div##.className := (Js.string "movie overlay");
+    div##setAttribute (Js.string "imdb-rating ") (Js.string rating_text);
+    div##.style##setProperty (Js.string "--transparency") (Js.string (Printf.sprintf "%.1f" transparency)) Js.Optdef.empty |> ignore;
+    Dom.appendChild elt div
+  ) rating;
   ()
 
 
@@ -128,7 +165,6 @@ let fetch_imdb_rating =
       let result = Omdb.fetch_imdb_rating ?year title in
       Hashtbl.add in_progress ~key:(title, year) ~data:result;
       result
-
 
 let get_rating ?year title =
   let* rating = Storage.load_rating ?year title in
