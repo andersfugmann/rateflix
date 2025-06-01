@@ -132,25 +132,22 @@ let run () =
   List.iter (setup_transparency_slider ~callback)
     [slider_beta_key; slider_low_key; slider_high_key; slider_max_key];
 
-
   match getElementById_coerce "apikey" CoerceTo.input,
         getElementById_coerce "status" CoerceTo.div,
-        getElementById_coerce "apikey-form" CoerceTo.form,
+        getElementById_coerce "apikey-save" CoerceTo.button,
         getElementById "cache-count",
         getElementById_coerce "clear-cache" CoerceTo.button with
-  | Some apikey_input, Some status_div, Some form, cache_count, Some clear_btn ->
+  | Some apikey_input, Some status_div, Some apikey_save, cache_count, Some clear_btn ->
 
-    let* () = update_cache_count cache_count in
+    Lwt.ignore_result(update_cache_count cache_count);
 
-
-    Dom_html.addEventListener form Dom_html.Event.submit
-      (Dom_html.full_handler
-         (fun ev ->
-            let (_ : Dom_html.submitEvent Js.t) = Js.Unsafe.coerce ev in
+    Dom_html.addEventListener apikey_save Dom_html.Event.click
+      (Dom_html.handler
+         (fun _ ->
             let key = Js.to_string apikey_input##.value |> String.trim in
             Lwt.ignore_result @@ Lib.Storage.save_key Lib.Omdb.omdb_key key;
             show_status status_div "Api key saved";
-            (fun _ -> Js._false)
+            Js._false
          )) Js._false
     |> ignore;
 
@@ -181,7 +178,9 @@ let run () =
       | None -> ()
     end;
     Lwt.return_unit
-  | _ -> Lwt.return_unit
+  | _ ->
+    Log.log `Info "Could not find elements";
+    Lwt.return_unit
 
 
 let () =

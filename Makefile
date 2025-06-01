@@ -17,10 +17,10 @@ dist: ## Create the installation package directory for Edge
 dist: build icons
 	@rm -fr $(DIST_DIR)
 	@mkdir -p $(DIST_DIR)
-	@cd $(DIST_DIR); ln -s ../_build/default/src/*js .
-	@cd $(DIST_DIR); ln -s ../$(MANIFEST) .
-	@cd $(DIST_DIR); ln -s ../$(POPUP_HTML) .
-	@cd $(DIST_DIR); ln -s ../icons .
+	@cp _build/default/src/*js $(DIST_DIR)
+	@cp $(MANIFEST) $(DIST_DIR)
+	@cp $(POPUP_HTML) $(DIST_DIR)
+	@cp -av icons $(DIST_DIR)
 	#@chmod +rw $(DIST_DIR)/*
 
 .PHONY: clean
