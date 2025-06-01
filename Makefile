@@ -29,15 +29,16 @@ clean:
 	rm -rf $(DIST_DIR)
 	dune clean
 
-.PHONY: help
-help: ## Show this help
-help:
-	@grep -h -E '^[.a-zA-Z_-]+:.*## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
-
 .PHONY: icons
 ICON_SIZES=16 32 48 128
 icons: ## Create icons
 icons: $(foreach size,$(ICON_SIZES),icons/icon$(size).png)
 
 icons/icon%.png: icons/icon.svg
-	convert -background none -size $*x$* $< $@
+	convert -background none -scale $*x$* $< $@
+
+
+.PHONY: help
+help: ## Show this help
+help:
+	@grep -h -E '^[.a-zA-Z_-]+:.*## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
