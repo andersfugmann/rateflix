@@ -3,3 +3,4 @@ dist/
 *.opam
 .vscode/
 make.log
+icons/*png

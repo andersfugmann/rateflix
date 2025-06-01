@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1A237E;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#311B92;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Star gradient -->
+    <linearGradient id="starGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFC107;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FFD54F;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Reflect effect -->
+    <linearGradient id="reflectGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:0.2" />
+      <stop offset="100%" style="stop-color:#FFFFFF;stop-opacity:0" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main circle background -->
+  <circle cx="256" cy="256" r="248" fill="url(#bgGradient)" stroke="#7E57C2" stroke-width="12" />
+  
+  <!-- Circular film strip design -->
+  <g opacity="0.3">
+    <circle cx="256" cy="256" r="220" stroke="#E1BEE7" stroke-width="4" stroke-dasharray="8 12" />
+    <circle cx="256" cy="256" r="190" stroke="#E1BEE7" stroke-width="4" stroke-dasharray="8 12" />
+  </g>
+  
+  <!-- Play button stylized triangle -->
+  <path d="M200 170L360 256L200 342L200 170Z" fill="#E91E63" stroke="#FFFFFF" stroke-width="8" stroke-linejoin="round" />
+  
+  <!-- Star with rating -->
+  <g transform="translate(256, 375) scale(0.85)">
+    <path d="M0 -70L20.41 -21.64L72.76 -21.64L30.18 10.82L50.59 59.18L0 26.72L-50.59 59.18L-30.18 10.82L-72.76 -21.64L-20.41 -21.64L0 -70Z" 
+          fill="url(#starGradient)" 
+          stroke="#FFF" 
+          stroke-width="4" />
+    <text x="0" y="15" 
+          font-family="Arial, sans-serif" 
+          font-size="40" 
+          font-weight="bold" 
+          text-anchor="middle" 
+          fill="#212121">9.2</text>
+  </g>
+  
+  <!-- Text "StreamScore" -->
+  <text x="256" y="460" 
+        font-family="Arial, sans-serif" 
+        font-size="38" 
+        font-weight="bold" 
+        text-anchor="middle" 
+        fill="#FFFFFF">StreamScore</text>
+  
+  <!-- Overlay reflection effect -->
+  <circle cx="256" cy="256" r="248" fill="url(#reflectGradient)" />
+</svg>
