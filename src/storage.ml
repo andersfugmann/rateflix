@@ -19,6 +19,7 @@ let cache_entry_to_str entry = cache_entry_to_yojson entry |> Yojson.Safe.to_str
 let cache_key_prefix = "imdb_rating_cache_"
 let cache_ttl = 60. *. 60. *. 24. *. 7.
 let negative_cache_ttl = 60. *. 60.
+let transparency_key = "transparency"
 
 let gettimeofday () =
   let date = new%js Js.date_now in

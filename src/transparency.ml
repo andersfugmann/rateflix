@@ -1,4 +1,5 @@
 open! Js_of_ocaml
+open! Lwt.Syntax
 open! StdLabels
 open! ListLabels
 open! MoreLabels
@@ -21,6 +22,22 @@ let default =
     high = 7.0;
     max = 0.9;
   }
+
+let load () =
+  let* value = Storage.load_key Storage.transparency_key in
+  let value =
+    match value with
+    | Some value ->
+      of_str value
+    | None -> default
+  in
+  Lwt.return value
+
+let save value =
+  to_str value
+  |> Storage.save_key Storage.transparency_key
+
+
 
 let calculate t rating =
   let open Float in

@@ -2,8 +2,6 @@ open Js_of_ocaml
 open! Lwt.Syntax
 open Lib
 
-let transparency_key = "transparency"
-
 (* Constants for slider storage keys *)
 let slider_key_prefix = "transparency-"
 let slider_beta_key = slider_key_prefix ^ "beta"
@@ -25,26 +23,10 @@ let update_cache_count count_elem =
   count_elem##.innerHTML := text;
   Lwt.return_unit
 
-(* Load slider value from storage *)
-let load_transparency_settings () =
-  let* value = Lib.Storage.load_key transparency_key in
-  let value =
-    match value with
-    | Some value ->
-      Transparency.of_str value
-    | None -> Transparency.default
-  in
-  Lwt.return value
-
-let save_transparency_settings value =
-  Transparency.to_str value
-  |> Lib.Storage.save_key transparency_key
-
 (* Update a slider's display value *)
 let update_transparency_display_value id value =
-  let open Dom_html in
   let value_span_id = id ^ "-value" in
-  match document##getElementById (Js.string value_span_id) |> Js.Opt.to_option with
+  match Dom_html.document##getElementById (Js.string value_span_id) |> Js.Opt.to_option with
   | Some span -> span##.textContent := Js.some (Js.string (Printf.sprintf "%.1f" value))
   | None -> Log.log `Info "%s Could not find %s" __FUNCTION__ value_span_id
 
@@ -107,7 +89,7 @@ let setup_save_button status_div =
         (handler (fun _ ->
            let transparency = get_transparency_settings () in
            Lwt.ignore_result (
-             let* () = save_transparency_settings transparency in
+             let* () = Transparency.save transparency in
              show_status status_div "Transparency settings saved";
              Lwt.return_unit);
            Js._false
@@ -126,7 +108,7 @@ let setup_reset_button status_div =
       addEventListener button Event.click
         (handler (fun _ ->
            let transparency = Transparency.default in
-           Lwt.ignore_result (save_transparency_settings transparency);
+           Lwt.ignore_result (Transparency.save transparency);
            set_transparency_settings transparency;
            show_status status_div "Transparency Settings Reset";
           Js._false
@@ -140,7 +122,7 @@ let setup_reset_button status_div =
 let run () =
   let open Dom_html in
 
-  let* transparency = load_transparency_settings () in
+  let* transparency = Transparency.load () in
   set_transparency_settings transparency;
 
   (* Initialize cache count display *)
