@@ -47,7 +47,7 @@ let add_custom_styles () =
       justify-content: center;
       font-weight: bold;
       box-shadow: 0px 2px 8px rgba(0,0,0,0.15);
-      z-index: 1000;
+      z-index: 0;
       pointer-events: none;
     }
 
@@ -58,9 +58,11 @@ let add_custom_styles () =
       left: 0%;
       height: 100%;
       width: 100%;
-      background: rgba(12, 52, 64, var(--transparency));
+      background: rgba(0, 0, 0, var(--transparency));
       pointer-events: none;
     }
+    .movie.overlay1 {
+      background: gradient(circle, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.7) 100%);
 
   |}
   in

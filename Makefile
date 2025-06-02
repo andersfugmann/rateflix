@@ -12,9 +12,14 @@ build: ## Build the project
 build:
 	@dune build
 
+.PHONY: build-release
+build-release: ## Build the project (release mode)
+build-release:
+	@dune build --profile=release
+
 .PHONY: dist
 dist: ## Create the installation package directory for Edge
-dist: build icons
+dist: build-release icons
 	@rm -fr $(DIST_DIR)
 	@mkdir -p $(DIST_DIR)
 	@cp _build/default/src/*js $(DIST_DIR)

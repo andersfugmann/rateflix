@@ -4,7 +4,7 @@
  (modes js)
  (js_of_ocaml
   (flags --opt 3 --target-env browser)
-  (compilation_mode separate)
+  ;(compilation_mode whole_program)
  )
  (libraries js_of_ocaml js_of_ocaml-lwt lib)
  (preprocess (pps js_of_ocaml-ppx))
@@ -16,7 +16,7 @@
  (modes js)
  (js_of_ocaml
   (flags --opt 3 --target-env browser)
-  (compilation_mode separate)
+  ;(compilation_mode whole_program)
  )
  (libraries js_of_ocaml js_of_ocaml-lwt lib)
  (preprocess (pps js_of_ocaml-ppx))
@@ -28,7 +28,7 @@
  (modes js)
  (js_of_ocaml
   (flags --opt 3 --target-env browser)
-  (compilation_mode separate)
+  ;(compilation_mode whole_program)
  )
  (libraries js_of_ocaml js_of_ocaml-lwt lib)
  (preprocess (pps js_of_ocaml-ppx))
@@ -40,7 +40,7 @@
  (modes js)
  (js_of_ocaml
   (flags --opt 3 --target-env browser)
-  (compilation_mode separate)
+  ;(compilation_mode whole_program)
  )
  (libraries js_of_ocaml lib)
  (preprocess (pps js_of_ocaml-ppx))

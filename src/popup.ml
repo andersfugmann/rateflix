@@ -9,7 +9,6 @@ let slider_low_key = slider_key_prefix ^ "low"
 let slider_high_key = slider_key_prefix ^ "high"
 let slider_max_key = slider_key_prefix ^ "max"
 
-
 let show_status status_div msg =
   status_div##.textContent := Js.some (Js.string msg);
   let _ = Dom_html.window##setTimeout
@@ -24,7 +23,7 @@ let update_cache_count count_elem =
   Lwt.return_unit
 
 (* Update a slider's display value *)
-let update_transparency_display_value id value =
+let set_transparency_display_value id value =
   let value_span_id = id ^ "-value" in
   match Dom_html.document##getElementById (Js.string value_span_id) |> Js.Opt.to_option with
   | Some span -> span##.textContent := Js.some (Js.string (Printf.sprintf "%.1f" value))
@@ -35,7 +34,7 @@ let set_transparency_value id value =
   | None -> Log.log `Info "%s Could not find %s" __FUNCTION__ id
   | Some s ->
     s##.value := Js.string (string_of_float value);
-    update_transparency_display_value id value
+    set_transparency_display_value id value
 
 let get_transparency_value id =
   match Dom_html.getElementById_coerce id Dom_html.CoerceTo.input with
@@ -63,6 +62,7 @@ let set_transparency_settings t =
 
 (* Set up a slider with its stored value and event listener *)
 let setup_transparency_slider ~callback:_ slider_id =
+  (* We should find the value element. No need to continiously look it up. *)
   let open Dom_html in
   match getElementById_coerce slider_id CoerceTo.input with
   | Some slider ->
@@ -70,7 +70,7 @@ let setup_transparency_slider ~callback:_ slider_id =
       addEventListener slider Event.input
         (handler (fun _ ->
           let value = float_of_string (Js.to_string slider##.value) in
-          update_transparency_display_value slider_id value;
+          set_transparency_display_value slider_id value;
           Transparency.send_event (get_transparency_settings ());
           Js._true
         ))
@@ -132,55 +132,51 @@ let run () =
   List.iter (setup_transparency_slider ~callback)
     [slider_beta_key; slider_low_key; slider_high_key; slider_max_key];
 
-  match getElementById_coerce "apikey" CoerceTo.input,
-        getElementById_coerce "status" CoerceTo.div,
-        getElementById_coerce "apikey-save" CoerceTo.button,
-        getElementById "cache-count",
-        getElementById_coerce "clear-cache" CoerceTo.button with
-  | Some apikey_input, Some status_div, Some apikey_save, cache_count, Some clear_btn ->
+  let apikey_el = getElementById_coerce "apikey" CoerceTo.input |> Option.get in
+  let status_el = getElementById "status" in
+  let apikey_save_el = getElementById "apikey-save" in
+  let cache_count = getElementById "cache-count" in
+  let clear_cache_el = getElementById "clear-cache" in
 
-    Lwt.ignore_result(update_cache_count cache_count);
+  Lwt.ignore_result(update_cache_count cache_count);
 
-    Dom_html.addEventListener apikey_save Dom_html.Event.click
-      (Dom_html.handler
-         (fun _ ->
-            let key = Js.to_string apikey_input##.value |> String.trim in
-            Lwt.ignore_result @@ Lib.Storage.save_key Lib.Omdb.omdb_key key;
-            show_status status_div "Api key saved";
-            Js._false
-         )) Js._false
-    |> ignore;
+  Dom_html.addEventListener apikey_save_el Dom_html.Event.click
+    (Dom_html.handler
+       (fun _ ->
+          let key = Js.to_string apikey_el##.value |> String.trim in
+          Lwt.ignore_result @@ Lib.Storage.save_key Lib.Omdb.omdb_key key;
+          show_status status_el "Api key saved";
+          Js._false
+       )) Js._false
+  |> ignore;
 
-    Dom_html.addEventListener clear_btn Dom_html.Event.click
-      (Dom_html.handler
-         (fun _ ->
-            let inner () =
-              let* () = Lib.Storage.clear_cache () in
-              let* () = update_cache_count cache_count in
-              Lwt.return_none
-            in
-            Lwt.ignore_result (inner ());
-            show_status status_div "Cache cleared";
-            Js._false
-         )) Js._false
-    |> ignore;
+  Dom_html.addEventListener clear_cache_el Dom_html.Event.click
+    (Dom_html.handler
+       (fun _ ->
+          let inner () =
+            let* () = Lib.Storage.clear_cache () in
+            let* () = update_cache_count cache_count in
+            Lwt.return_none
+          in
+          Lwt.ignore_result (inner ());
+          show_status status_el "Cache cleared";
+          Js._false
+       )) Js._false
+  |> ignore;
 
-    (* Set up save and reset buttons *)
-    let* () = setup_save_button status_div in
-    let* () = setup_reset_button status_div in
+  (* Set up save and reset buttons *)
+  let* () = setup_save_button status_el in
+  let* () = setup_reset_button status_el in
 
-    let* key = Lib.Storage.load_key Lib.Omdb.omdb_key in
-    begin
-      match key with
-      | Some key ->
-        apikey_input##.value := (Js.string key);
-        show_status status_div "Api key loaded"
-      | None -> ()
-    end;
-    Lwt.return_unit
-  | _ ->
-    Log.log `Info "Could not find elements";
-    Lwt.return_unit
+  let* key = Lib.Storage.load_key Lib.Omdb.omdb_key in
+  begin
+    match key with
+    | Some key ->
+      apikey_el##.value := (Js.string key);
+      show_status status_el "Api key loaded"
+    | None -> ()
+  end;
+  Lwt.return_unit
 
 
 let () =
