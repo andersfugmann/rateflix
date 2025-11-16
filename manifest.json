@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "RateFlix",
+  "name": "Rateflix",
   "version": "0.1",
   "description": "Adds IMDb scores to streaming services using omdb",
   "content_scripts": [
