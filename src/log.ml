@@ -6,10 +6,10 @@ let log = false
 let log level =
   let logger level =
     match level with
-    | `Debug -> fun s -> Console.console##debug s
-    | `Info -> fun s -> Console.console##info s
-    | `Warn -> fun s -> Console.console##warn s
-    | `Error -> fun s -> Console.console##error s
+    | `Debug -> fun s -> Console.console##debug (Js.string s)
+    | `Info -> fun s -> Console.console##info (Js.string s)
+    | `Warn -> fun s -> Console.console##warn (Js.string s)
+    | `Error -> fun s -> Console.console##error (Js.string s)
   in
   let logger = logger level in
 
