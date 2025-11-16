@@ -1,6 +1,6 @@
 _build/
 dist/
-*.opam
+plugin/
 .vscode/
 make.log
 icons/*png

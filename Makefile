@@ -1,10 +1,5 @@
-DIST_DIR=dist
-JS_SRC=_build/default/src/main.bc.js
-JS_DST=$(DIST_DIR)/main.js
-POPUP_JS_SRC=_build/default/src/popup.bc.js
-POPUP_JS_DST=$(DIST_DIR)/popup.js
-MANIFEST=manifest.json
-POPUP_HTML=popup.html
+PLUGIN_DIR=plugin
+PLUGIN_BUILD_DIR=_build/default/plugin
 
 
 .PHONY: build
@@ -17,16 +12,16 @@ build-release: ## Build the project (release mode)
 build-release:
 	@dune build --profile=release
 
+.PHONY: plugin
+plugin: ## Create the plugin directory via dune alias
+plugin: icons
+	@dune build --profile=release @plugin
+	@rm -fr $(PLUGIN_DIR)
+	@mkdir -p $(PLUGIN_DIR)
+	@cp -a $(PLUGIN_BUILD_DIR)/* $(PLUGIN_DIR)
+
 .PHONY: dist
-dist: ## Create the installation package directory for Edge
-dist: build-release icons
-	@rm -fr $(DIST_DIR)
-	@mkdir -p $(DIST_DIR)
-	@cp _build/default/src/*js $(DIST_DIR)
-	@cp $(MANIFEST) $(DIST_DIR)
-	@cp $(POPUP_HTML) $(DIST_DIR)
-	@cp -av icons $(DIST_DIR)
-	#@chmod +rw $(DIST_DIR)/*
+dist: plugin ## Backwards-compatible target; use `make plugin`
 
 .PHONY: clean
 clean: ## Remove build and package artifacts
