@@ -44,7 +44,8 @@ let process ?title_selector ~selector ~title_extract_f ~size () =
   )
   |> List.filter ~f:(fun (elt, title) -> not (is_game ~title elt))
   |> Lwt_list.iter_p (fun (elt, title) ->
-    add_score_icon ~title ~size elt
+      Log.log `Info "Found title: '%s'" title;
+      add_score_icon ~title ~size elt
   )
 
 (* Adding makes it unhover. Need to fix that! *)

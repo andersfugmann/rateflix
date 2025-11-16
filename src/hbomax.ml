@@ -38,6 +38,7 @@ let is_continue_watching_element = has_parent_element ~f:(attribute_match ~attri
    data-sonic-id="home-page-rail-continue-watching-experiment-1063", then we may want to strip the first word
    (se | watch)
 *)
+
 let parse_title =
   let top_elements =
     Regexp.regexp "^[A-za-z]+ [0-9]?[0-9]: (.*)$"
@@ -53,20 +54,18 @@ let parse_title =
     in
     match is_continue_watching_element elt with
      | true ->
-       Log.log `Info "Found continue watching title: %s" title;
+       Log.log `Debug "Found continue watching title: %s" title;
        String.split_on_char ~sep:' ' title
        |> List.tl
        |> String.concat ~sep:" "
      | false -> title
 
 let add_score_icon ~title ~size elt =
-  Log.log `Info "Lookup title: %s" title;
+  Log.log `Debug "Lookup title: %s" title;
   let* rating = Plugin.get_rating title in
   Plugin.add_rating_badge ~size ~rating elt;
   Lwt.return_unit
 
-
-let _tap ~f x = f x; x
 
 let has_schedule elt =
   elt##querySelector (Js.string "[data-testid='metadata_schedule']")
