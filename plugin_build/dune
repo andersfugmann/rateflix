@@ -1,0 +1,70 @@
+(alias
+ (name plugin)
+ (deps
+  manifest.json
+  popup.html
+  netflix.bc.js
+  prime.bc.js
+  hbomax.bc.js
+  popup.bc.js
+  icons/icon.svg
+  icons/icon16.png
+  icons/icon32.png
+  icons/icon48.png
+  icons/icon128.png))
+
+(rule
+ (targets manifest.json)
+ (deps ../manifest.json)
+ (action (copy %{deps} %{targets})))
+
+(rule
+ (targets popup.html)
+ (deps ../popup.html)
+ (action (copy %{deps} %{targets})))
+
+(rule
+ (targets netflix.bc.js)
+ (deps ../src/netflix.bc.js)
+ (action (copy %{deps} %{targets})))
+
+(rule
+ (targets prime.bc.js)
+ (deps ../src/prime.bc.js)
+ (action (copy %{deps} %{targets})))
+
+(rule
+ (targets hbomax.bc.js)
+ (deps ../src/hbomax.bc.js)
+ (action (copy %{deps} %{targets})))
+
+(rule
+ (targets popup.bc.js)
+ (deps ../src/popup.bc.js)
+ (action (copy %{deps} %{targets})))
+
+(subdir icons
+ (rule
+  (targets icon.svg)
+  (deps ../../rateflix.svg)
+  (action (copy %{deps} %{targets})))
+
+ (rule
+  (targets icon16.png)
+  (deps icon.svg)
+  (action (bash "set -euo pipefail\nmagick %{deps} -background none -resize 16x16 %{targets}\n")))
+
+ (rule
+  (targets icon32.png)
+  (deps icon.svg)
+  (action (bash "set -euo pipefail\nmagick %{deps} -background none -resize 32x32 %{targets}\n")))
+
+ (rule
+  (targets icon48.png)
+  (deps icon.svg)
+  (action (bash "set -euo pipefail\nmagick %{deps} -background none -resize 48x48 %{targets}\n")))
+
+ (rule
+  (targets icon128.png)
+  (deps icon.svg)
+  (action (bash "set -euo pipefail\nmagick %{deps} -background none -resize 128x128 %{targets}\n"))))

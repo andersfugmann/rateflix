@@ -1,5 +1,5 @@
 PLUGIN_DIR=plugin
-PLUGIN_BUILD_DIR=_build/default/plugin
+PLUGIN_BUILD_DIR=_build/default/plugin_build
 
 
 .PHONY: build
@@ -12,13 +12,13 @@ build-release: ## Build the project (release mode)
 build-release:
 	@dune build --profile=release
 
+
 .PHONY: plugin
 plugin: ## Create the plugin directory via dune alias
-plugin: icons
+	@rm -f $(PLUGIN_DIR)
 	@dune build --profile=release @plugin
-	@rm -fr $(PLUGIN_DIR)
-	@mkdir -p $(PLUGIN_DIR)
-	@cp -a $(PLUGIN_BUILD_DIR)/* $(PLUGIN_DIR)
+	@ln -sf $(PLUGIN_BUILD_DIR) $(PLUGIN_DIR)
+
 
 .PHONY: dist
 dist: plugin ## Backwards-compatible target; use `make plugin`
@@ -26,17 +26,8 @@ dist: plugin ## Backwards-compatible target; use `make plugin`
 .PHONY: clean
 clean: ## Remove build and package artifacts
 clean:
-	rm -rf $(DIST_DIR)
+	rm -rf $(PLUGIN_DIR)
 	dune clean
-
-.PHONY: icons
-ICON_SIZES=16 32 48 128
-icons: ## Create icons
-icons: $(foreach size,$(ICON_SIZES),icons/icon$(size).png)
-
-icons/icon%.png: icons/icon.svg
-	convert -background none -scale $*x$* $< $@
-
 
 .PHONY: help
 help: ## Show this help

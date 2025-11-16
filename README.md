@@ -16,12 +16,11 @@ The plugin is build using js_of_ocaml. You will need to install opam.
 Then do
 ```
 $ opam install . --deps-only
-$ make dist
+$ make plugin
 
 ```
 
 ## Installation
 In chrome/edge, open the plugin and choose 'load unpacked'. Then
-navigate to and select the `dist` folder.
-
+navigate to and select the `<workspace>/plugin` folder.
 Under the plugin settings, enter your omdb api key and press save.
