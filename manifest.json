@@ -13,7 +13,7 @@
       "js": ["prime.bc.js"]
     },
     {
-      "matches": ["*://play.max.com/*"],
+        "matches": ["*://play.max.com/*", "*://play.hbomax.com/*"],
       "js": ["hbomax.bc.js"]
     }
   ],
