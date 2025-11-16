@@ -52,19 +52,19 @@
  (rule
   (targets icon16.png)
   (deps icon.svg)
-  (action (bash "set -euo pipefail\nmagick %{deps} -background none -resize 16x16 %{targets}\n")))
+  (action (run convert %{deps} -background none -resize 16x16 %{targets})))
 
  (rule
   (targets icon32.png)
   (deps icon.svg)
-  (action (bash "set -euo pipefail\nmagick %{deps} -background none -resize 32x32 %{targets}\n")))
+  (action (run convert %{deps} -background none -resize 32x32 %{targets})))
 
  (rule
   (targets icon48.png)
   (deps icon.svg)
-  (action (bash "set -euo pipefail\nmagick %{deps} -background none -resize 48x48 %{targets}\n")))
+  (action (run convert %{deps} -background none -resize 64x64 %{targets})))
 
  (rule
   (targets icon128.png)
   (deps icon.svg)
-  (action (bash "set -euo pipefail\nmagick %{deps} -background none -resize 128x128 %{targets}\n"))))
+  (action (run convert %{deps} -background none -resize 128x128 %{targets}))))

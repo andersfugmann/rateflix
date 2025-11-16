@@ -5,8 +5,8 @@
 (package
  (version 0.1)
  (license MIT)
- (authors "<your-name>")
- (maintainers "<your-email@example.com>")
+ (authors "Anders Fugmann")
+ (maintainers "<anders@fugmann.net>")
  (homepage "https://github.com/andersfugmann/rateflix")
  (bug_reports "https://github.com/andersfugmann/rateflix/issues")
  (source (github andersfugmann/rateflix))

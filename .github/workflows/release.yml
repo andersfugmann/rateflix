@@ -1,0 +1,66 @@
+name: Release dist
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    name: Build and publish distribution
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.4"
+          dune-cache: true
+
+      - name: Install dependencies
+        run: opam install . --deps-only --with-test
+
+      - name: Install ImageMagick
+        run: sudo apt update && sudo apt install -y imagemagick
+
+      - name: Build plugin bundle
+        run: |
+          opam exec -- dune build --profile=release @plugin
+          rm -rf rateflix
+          cp -a _build/default/plugin_build rateflix
+
+      - name: Archive distribution directory
+        id: package
+        run: |
+          SHORT_SHA=${GITHUB_SHA::7}
+          ARCHIVE_NAME="rateflix-dist-${SHORT_SHA}.tar.gz"
+          tar -czf "$ARCHIVE_NAME" rateflix
+          echo "archive_name=$ARCHIVE_NAME" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-${{ steps.package.outputs.short_sha }}
+          path: |
+            plugin
+            ${{ steps.package.outputs.archive_name }}
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: release-${{ steps.package.outputs.short_sha }}
+          name: Rateflix plugin (${{ steps.package.outputs.short_sha }})
+          body: |
+            Automated release for commit ${{ github.sha }} on branch ${{ github.ref }}.
+            Contains the output of `dune build --profile=release @plugin` packaged as a tarball as well as the raw `plugin` directory.
+          files: ${{ steps.package.outputs.archive_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

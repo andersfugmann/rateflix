@@ -1,6 +1,6 @@
 _build/
 dist/
-plugin/
+plugin
 .vscode/
 make.log
 icons/*png
