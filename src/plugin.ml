@@ -98,7 +98,7 @@ let add_rating_badge ?(transparent=true) ~size ~rating elt =
   in
   let rating_text = match rating with
     | Some rating -> Printf.sprintf "%.1f" rating
-    | None -> "--"
+    | None -> "∞"
   in
 
   let doc = Dom_html.document in
