@@ -60,10 +60,10 @@ let parse_title =
        |> String.concat ~sep:" "
      | false -> title
 
-let add_score_icon ~title ~size elt =
+let add_score_icon ?transparent ~title ~size elt =
   Log.log `Debug "Lookup title: %s" title;
   let* rating = Plugin.get_rating title in
-  Plugin.add_rating_badge ~size ~rating elt;
+  Plugin.add_rating_badge ?transparent ~size ~rating elt;
   Lwt.return_unit
 
 
@@ -92,7 +92,7 @@ let get_title elt =
   | false when Option.is_some title -> title
   | _ -> title_attr
 
-let process_elements ~selector ~size () =
+let process ?transparent ~selector ~size () =
   Dom_html.document##querySelectorAll (Js.string selector)
   |> Dom.list_of_nodeList
   |> List.filter ~f:(fun elt -> Plugin.has_imdb_overlay elt |> not)
@@ -103,17 +103,24 @@ let process_elements ~selector ~size () =
       Option.map (fun title -> elt, title) title
     )
   |> Lwt_list.iter_p (fun (elt, title) ->
-    add_score_icon ~title ~size elt
+    add_score_icon ?transparent ~title ~size elt
   )
 
+let process_headings =
+  process
+    ~selector:"[role='heading']"
+    ~size:`Medium
+    ~transparent:false
+
 let process_tiles =
-  process_elements
+  process
     ~selector:"[data-sonic-type='show'], [data-sonic-type='video']"
     ~size:`Regular
 
 (* Main processing function that runs on every iteration *)
 let process () =
   let* () = process_tiles () in
+  let* () = process_headings () in
   Lwt.return_unit
 
 let () = Plugin.start_plugin ~add_ratings:process ()
