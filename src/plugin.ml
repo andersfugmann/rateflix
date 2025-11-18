@@ -7,6 +7,8 @@ open! ListLabels
 open! MoreLabels
 
 
+let debug = false
+
 (** Add custom CSS for rating badges *)
 let add_custom_styles () =
   let doc = Dom_html.document in
@@ -18,7 +20,7 @@ let add_custom_styles () =
       height: 32px;
       font-size: 16px;
       top: 16px;
-      right: 16px;
+      right: 60px;
     }
 
     .imdb-rating-overlay.medium-badge {
@@ -63,6 +65,7 @@ let add_custom_styles () =
     }
     .movie.overlay1 {
       background: gradient(circle, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.7) 100%);
+    }
 
   |}
   in
@@ -76,14 +79,15 @@ let rec get_parent: level:int -> Dom_html.element Js.t -> Dom_html.element Js.t 
   | 0 -> elt
   | _ ->
     let parent =
-      match elt##.parentNode |> Js.Opt.to_option with
-      | None -> elt
-      | Some parent -> parent |> Js.Unsafe.coerce
+      elt##.parentNode
+      |> Js.Opt.to_option
+      |> Option.map (fun elt -> Dom_html.CoerceTo.element elt |> Js.Opt.to_option)
+      |> Option.join
+      |> Option.value ~default:elt
     in
     get_parent ~level:(level - 1) parent
 
-
-let add_rating_badge ~size ~rating elt =
+let add_rating_badge ?(transparent=true) ~size ~rating elt =
   let class_name =
     let size = match size with
       | `Regular -> "regular"
@@ -96,8 +100,21 @@ let add_rating_badge ~size ~rating elt =
     | Some rating -> Printf.sprintf "%.1f" rating
     | None -> "--"
   in
-  (* Can we remove an element all together? *)
+
   let doc = Dom_html.document in
+
+  let () =
+    match rating, transparent with
+    | Some rating, true ->
+      let transparency = Transparency.(calculate default rating) in
+      let div = Dom_html.createSpan doc in
+      div##.className := (Js.string "movie overlay");
+      div##setAttribute (Js.string "imdb-rating") (Js.string rating_text);
+      div##.style##setProperty (Js.string "--transparency") (Js.string (Printf.sprintf "%.5f" transparency)) Js.Optdef.empty |> ignore;
+      Dom.appendChild elt div
+    | _ -> ()
+  in
+
   let div = Dom_html.createSpan doc in
   div##.textContent := Js.some (Js.string rating_text);
   div##.className := Js.string class_name;
@@ -106,17 +123,7 @@ let add_rating_badge ~size ~rating elt =
     | "" -> elt##.style##.position := Js.string "relative";
     | _ -> ()
   in
-  Dom.appendChild elt div;
-
-  Option.iter (fun rating ->
-    let transparency = Transparency.(calculate default rating) in
-    let div = Dom_html.createSpan doc in
-    div##.className := (Js.string "movie overlay");
-    div##setAttribute (Js.string "imdb-rating") (Js.string rating_text);
-    div##.style##setProperty (Js.string "--transparency") (Js.string (Printf.sprintf "%.5f" transparency)) Js.Optdef.empty |> ignore;
-    Dom.appendChild elt div
-  ) rating;
-  ()
+  Dom.appendChild elt div
 
 
 let has_imdb_overlay =
@@ -164,6 +171,18 @@ let get_rating ?year title =
         Log.log `Warn "Error fetching rating for %s: %s" title err;
         let* () = Storage.save_rating ~title ~rating:None in
         Lwt.return None
+
+let get_rating = match debug with
+  | false -> get_rating
+  | true -> fun ?year:_ title ->
+    Log.log `Info "Get rating for title: '%s'" title;
+    Digest.MD5.string title
+    |> Digest.MD5.to_hex
+    |> String.fold_left ~init:0 ~f:(fun acc c -> acc + Char.code c)
+    |> (fun v -> v mod 70)
+    |> (fun v -> float v /. 10.0 +. 2.)
+    |> Option.some
+    |> Lwt.return
 
 
 let rec daemon ~f condition () =
