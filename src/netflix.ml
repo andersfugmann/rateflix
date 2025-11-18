@@ -7,9 +7,9 @@ open! ListLabels
 open! MoreLabels
 open Lib
 
-let add_score_icon ~title ~size elt =
+let add_score_icon ?transparent ~title ~size elt =
   let* rating = Lib.Plugin.get_rating title in
-  Plugin.add_rating_badge ~rating ~size elt;
+  Plugin.add_rating_badge ?transparent ~rating ~size elt;
   Lwt.return_unit
 
 let is_game el ~title =
@@ -26,7 +26,7 @@ let is_game el ~title =
   | true -> true
 
 
-let process ?title_selector ~selector ~title_extract_f ~size () =
+let process ?transparent ?title_selector ~selector ~title_extract_f ~size () =
   Dom_html.document##querySelectorAll (Js.string selector)
   |> Dom.list_of_nodeList
   |> List.filter ~f:(fun el -> Plugin.has_imdb_overlay el |> not)
@@ -44,25 +44,29 @@ let process ?title_selector ~selector ~title_extract_f ~size () =
   )
   |> List.filter ~f:(fun (elt, title) -> not (is_game ~title elt))
   |> Lwt_list.iter_p (fun (elt, title) ->
-      Log.log `Info "Found title: '%s'" title;
-      add_score_icon ~title ~size elt
+      add_score_icon ?transparent ~title ~size elt
   )
 
 (* Adding makes it unhover. Need to fix that! *)
 let process_hover_tiles () =
   process
-    ~selector:".videoMerchPlayer--boxart-wrapper"
+    ~selector:"[class^='previewModal--player_container has-smaller-buttons mini-modal']"
     ~title_selector:".previewModal--boxart"
     ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "alt"))
     ~size:`Medium
+    ~transparent:false
     ()
+
+(* mini-modal or detail-modal *)
+(* Style can be either opacity 0 or style="opacity: 1" => large *)
 
 let process_details () =
   process
-    ~selector:".videoMerchPlayer--boxart-wrapper"
+    ~selector:"[class^='previewModal--player_container has-smaller-buttons detail-modal']"
     ~title_selector:".previewModal--boxart"
     ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "alt"))
     ~size:`Large
+    ~transparent:false
     ()
 
 let process_recommendations () =
