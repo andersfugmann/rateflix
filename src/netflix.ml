@@ -47,48 +47,56 @@ let process ?transparent ?title_selector ~selector ~title_extract_f ~size () =
       add_score_icon ?transparent ~title ~size elt
   )
 
-(* Adding makes it unhover. Need to fix that! *)
-let process_hover_tiles () =
+let process_billboard () =
   process
-    ~selector:"[class^='previewModal--player_container has-smaller-buttons mini-modal']"
-    ~title_selector:".previewModal--boxart"
-    ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "alt"))
-    ~size:`Medium
-    ~transparent:false
-    ()
-
-(* mini-modal or detail-modal *)
-(* Style can be either opacity 0 or style="opacity: 1" => large *)
-
-let process_details () =
-  process
-    ~selector:"[class^='previewModal--player_container has-smaller-buttons detail-modal']"
-    ~title_selector:".previewModal--boxart"
-    ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "alt"))
+    ~selector:"[class='billboard-title']"
+    ~title_selector:"[class='title-logo']"
+    ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "title"))
     ~size:`Large
     ~transparent:false
     ()
 
+let process_details () =
+  let* () =
+    process
+      ~selector:"[class^='previewModal--player_container has-smaller-buttons mini-modal']"
+      ~title_selector:".previewModal--boxart"
+      ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "alt"))
+      ~size:`Medium
+      ~transparent:false
+      ()
+  in
+  let* () =
+    process
+      ~selector:"[class^='previewModal--player_container has-smaller-buttons detail-modal']"
+      ~title_selector:".previewModal--boxart"
+      ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "alt"))
+      ~size:`Large
+      ~transparent:false
+      ()
+  in
+  Lwt.return ()
+
 let process_recommendations () =
   process
-    ~selector:".titleCard--container"
+    ~selector:"[class='titleCard--container']"
     ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "aria-label"))
     ~size:`Regular
     ()
 
 let process_tiles () =
   process
-    ~selector:".title-card"
-    ~title_selector:".fallback-text"
-    ~title_extract_f:(fun el -> el##.textContent)
+    ~selector:"[class^='title-card']"
+    ~title_selector:"[aria-label]"
+    ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "aria-label"))
     ~size:`Regular
     ()
 
 let process () =
-  let* () = process_tiles () in
+  let* () = process_billboard () in
   let* () = process_recommendations () in
-  let* () = process_hover_tiles () in
   let* () = process_details () in
+  let* () = process_tiles () in
   Lwt.return_unit
 
 let () = Lib.Plugin.start_plugin ~add_ratings:process ()

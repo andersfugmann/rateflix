@@ -37,16 +37,21 @@ let add_score_icon ?transparent ~title ~size elt =
   Plugin.add_rating_badge ?transparent ~size ~rating elt;
   Lwt.return_unit
 
-let process_elements ?debug ?sub_selector ?transparent ~selector ~size () =
+let opt_js_str = function
+  | Some js -> Js.to_string js
+  | None -> "N/A"
+
+let process_elements ?debug ?sub_selector ?transparent ?(title_attribute="aria-label")~selector ~size () =
   Dom_html.document##querySelectorAll (Js.string selector)
   |> Dom.list_of_nodeList
-  |> (fun list -> Option.iter (fun _ -> Log.log `Info "Found %d element for %s" (List.length list) selector) debug; list)
   |> List.filter_map ~f:(fun elt ->
-      (* We dont need to go look for this. *)
-      elt##querySelector (Js.string "[aria-label]")
+      (* We don't need to go look for this. *)
+      elt##querySelector (Js.string (Printf.sprintf "[%s]" title_attribute))
       |> Js.Opt.to_option
-      |> Option.map (fun elt -> elt##getAttribute (Js.string "aria-label") |> Js.Opt.to_option)
+      |> (function None -> Some elt | Some elt -> Some elt)
+      |> Option.map (fun elt -> elt##getAttribute (Js.string title_attribute) |> Js.Opt.to_option)
       |> Option.join
+      |> (fun title ->  Option.iter (fun _ -> Log.log `Info "Found title: %s for %s" (opt_js_str title) selector) debug; title)
       |> Option.map (fun title -> elt, Js.to_string title)
     )
   |> List.map ~f:(fun (elt, title) ->
@@ -105,14 +110,24 @@ let process_tiles () =
 (* The query selector '$=' means endswith *)
 let process_carousel =
   process_elements
-    ~selector:"[data-testid$='carousel-card'], [data-testid$='hero-card']"
+    ~selector:"[data-testid$='carousel-card']"
     ~size:`Large
+
+
+let process_hero_card =
+  process_elements
+    ~selector:"[data-testid='title-art']"
+    ~title_attribute:"alt"
+    ~sub_selector:"div"
+    ~size:`Regular
+    ~transparent:false
 
 (* Main processing function that runs on every iteration *)
 
 let process () =
   let* () = process_tiles () in
   let* () = process_carousel () in
+  let* () = process_hero_card () in
   Lwt.return_unit
 
 (* Initialize plugin *)

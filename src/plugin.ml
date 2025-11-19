@@ -7,7 +7,7 @@ open! ListLabels
 open! MoreLabels
 
 
-let debug = false
+let debug = true
 
 (** Add custom CSS for rating badges *)
 let add_custom_styles () =
@@ -21,6 +21,7 @@ let add_custom_styles () =
       font-size: 16px;
       top: 16px;
       right: 60px;
+      z-index: 100;
     }
 
     .imdb-rating-overlay.medium-badge {
