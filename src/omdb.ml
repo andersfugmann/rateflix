@@ -12,6 +12,7 @@ type omdb_response = {
   imdbRating: string option [@default None];
   imdbID: string option [@default None];
   response: string [@key "Response"];
+  error: string option [@key "Error"] [@default None];
 } [@@deriving yojson { strict = false }]
 
 
@@ -23,14 +24,12 @@ let omdb_response_to_json entry = omdb_response_to_yojson entry |> Yojson.Safe.t
 
 let omdb_api_url = "https://www.omdbapi.com/"
 let omdb_key = "omdbApiKey"
+let omdb_rate_limit = "Request limit reached!"
 
 (** Parse IMDb rating string to float option *)
-let parse_rating rating_str =
-  match float_of_string rating_str with
-  | n -> Some n
-  | exception _ -> None
+let parse_rating rating_str = float_of_string_opt rating_str
 
-let fetch_imdb_rating ?year title : (float option, string) Lwt_result.t =
+let fetch_imdb_rating ?year title : (float option, _) Lwt_result.t =
   let encodeUri str = str |> Js.string |> Js.encodeURI |> Js.to_string in
   let* api_key = Storage.load_key omdb_key in
   let api_key = Option.get api_key in
@@ -53,8 +52,17 @@ let fetch_imdb_rating ?year title : (float option, string) Lwt_result.t =
         | None -> Lwt_result.return None
       with e ->
         let msg = Printf.sprintf "Parse error: %s. %s" (Printexc.to_string e) json_str in
-        Lwt_result.fail msg
+        Lwt_result.fail (msg, `Retry)
     end
-  | { code;  _ } ->
-    let msg = Printf.sprintf "Request error: %d. Request: %s" code url in
-    Lwt_result.fail msg
+  | { code; content = body; _ } ->
+    let json_str = Js.to_string body in
+    try
+      (* Parse the JSON response using our safe deserializing *)
+      let response = omdb_response_of_json json_str in
+      match code, response.error with
+      | 401, Some msg when String.equal msg omdb_rate_limit -> Lwt_result.fail (msg, `RateLimit)
+      | _, Some msg -> Lwt_result.fail (msg, `Retry)
+      | _, None -> Lwt_result.fail (Printf.sprintf "Error: %d" code, `Retry)
+    with e ->
+      let msg = Printf.sprintf "Parse error: %s. %s" (Printexc.to_string e) json_str in
+      Lwt_result.fail (msg, `Retry)

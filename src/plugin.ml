@@ -6,7 +6,7 @@ open! StdLabels
 open! ListLabels
 open! MoreLabels
 
-
+(** Set to true to not call omdb, but return a rating derived from the title *)
 let debug = false
 
 (** Add custom CSS for rating badges *)
@@ -150,14 +150,21 @@ let fetch_imdb_rating =
       Hashtbl.add in_progress ~key:(title, year) ~data:result;
       result
 
+
+let ratelimited = ref false
 let get_rating ?year title =
   let* rating = Storage.load_rating ?year title in
   match rating with
   | Some rating ->
-    Log.log `Debug "Loaded rating from cache: %.1f: %s" rating title;
+    Log.log `Info "Loaded rating from cache: %.1f: %s" rating title;
     Lwt.return (Some rating)
   | None ->
-    let* result = fetch_imdb_rating ?year title in
+    let* result =
+      match !ratelimited with
+      | true -> Lwt_result.fail ("Ratelimited", `Ratelimited)
+      | false ->
+        fetch_imdb_rating ?year title
+    in
     match result with
     | Ok (Some rating) ->
       Log.log `Debug "Fetched rating from OMDb: %.1f: %s" rating title;
@@ -168,10 +175,17 @@ let get_rating ?year title =
       (* Cache the negative result too *)
       let* () = Storage.save_rating ~title ~rating:None in
       Lwt.return None
-    | Error err ->
+    | Error (err, `Retry) ->
         Log.log `Warn "Error fetching rating for %s: %s" title err;
         let* () = Storage.save_rating ~title ~rating:None in
         Lwt.return None
+    | Error (err, `RateLimit) ->
+      Log.log `Warn "Rate limit reached while fetching rating for %s: %s" title err;
+      ratelimited := true;
+      Lwt.return None
+    | Error (_, `Ratelimited) ->
+      Log.log `Info "Request dropped due to ratelimit for %s" title;
+      Lwt.return None
 
 let get_rating = match debug with
   | false -> get_rating
