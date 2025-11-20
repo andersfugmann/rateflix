@@ -7,7 +7,7 @@ open! ListLabels
 open! MoreLabels
 
 
-let debug = true
+let debug = false
 
 (** Add custom CSS for rating badges *)
 let add_custom_styles () =
