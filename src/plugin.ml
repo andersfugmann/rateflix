@@ -30,6 +30,7 @@ let add_custom_styles () =
       font-size: 12px;
       top: 12px;
       right: 12px;
+      z-index: 100;
     }
 
     .imdb-rating-overlay.regular-badge {
@@ -38,6 +39,7 @@ let add_custom_styles () =
       width: 20px;
       height: 20px;
       font-size: 10px;
+      z-index: 100;
     }
 
     .imdb-rating-overlay {
@@ -199,11 +201,56 @@ let get_rating = match debug with
     |> Option.some
     |> Lwt.return
 
+let add_score_icon ?transparent ~title ~size elt =
+  let* rating = get_rating title in
+  add_rating_badge ?transparent ~rating ~size elt;
+  Lwt.return_unit
+
+let process ?transparent ?title_selector ?sub_selector ?(filter=(fun (_, _) -> true)) ~selector ~title ~size =
+  let sub_selector = match sub_selector with
+    | None -> fun elt -> elt
+    | Some selector ->
+      let selector = Js.string selector in
+      fun elt -> elt##querySelector selector |> Js.Opt.to_option |> Option.value ~default:elt
+  in
+  let extract_title = match title with
+    | `Attribute attr ->
+      let attr = Js.string attr in
+      fun elt ->
+        elt##getAttribute attr
+        |> Js.Opt.to_option
+        |> Option.map Js.to_string
+    | `Function f -> fun elt -> f elt
+  in
+
+  let title_selector = match title_selector with
+    | Some selector ->
+      let selector = Js.string selector in
+      fun elt -> elt##querySelector selector |> Js.Opt.to_option
+    | None -> fun elt -> Some elt
+  in
+
+  fun () ->
+    Dom_html.document##querySelectorAll (Js.string selector)
+    |> Dom.list_of_nodeList
+    |> List.filter ~f:(fun el -> has_imdb_overlay el |> not)
+    |> List.filter_map ~f:(fun elt ->
+        title_selector elt
+        |> Option.map (fun title_elt -> extract_title title_elt)
+        |> Option.join
+        |> (fun title -> (match title with None -> Log.log `Info "No title found: %s" selector; Console.console##info elt | Some title -> Log.log `Info "Found title for %s: %s" selector title); title)
+        |> Option.map (fun title -> elt, title)
+      )
+    |> List.filter ~f:(fun (elt, title) -> match filter (elt, title) with false -> Log.log `Info "Filtered title: %s" title; false | true -> true)
+    |> List.map ~f:(fun (elt, title) -> (sub_selector elt, title))
+    |> Lwt_list.iter_p (fun (elt, title) ->
+        add_score_icon ?transparent ~title ~size elt
+      )
 
 let rec daemon ~f condition () =
   let* () = f () in
   let* () = Lwt_condition.wait condition in
-  let* () = Lwt_js.sleep 1.0 in
+  let* () = Lwt_js.sleep 0.5 in
   daemon ~f condition ()
 
 let observe_dom_changes condition =

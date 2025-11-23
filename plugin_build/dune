@@ -6,6 +6,7 @@
   netflix.bc.js
   prime.bc.js
   hbomax.bc.js
+  appletv.bc.js
   popup.bc.js
   icons/icon.svg
   icons/icon16.png
@@ -37,6 +38,12 @@
  (targets hbomax.bc.js)
  (deps ../src/hbomax.bc.js)
  (action (copy %{deps} %{targets})))
+
+(rule
+ (targets appletv.bc.js)
+ (deps ../src/appletv.bc.js)
+ (action (copy %{deps} %{targets})))
+
 
 (rule
  (targets popup.bc.js)

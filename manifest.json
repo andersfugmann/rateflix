@@ -13,8 +13,12 @@
       "js": ["prime.bc.js"]
     },
     {
-        "matches": ["*://play.max.com/*", "*://play.hbomax.com/*"],
+      "matches": ["*://play.max.com/*", "*://play.hbomax.com/*"],
       "js": ["hbomax.bc.js"]
+    },
+    {
+      "matches": ["*://tv.apple.com/*"],
+      "js": ["appletv.bc.js"]
     }
   ],
   "action": {

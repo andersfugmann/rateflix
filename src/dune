@@ -1,48 +1,12 @@
-(executable
- (name netflix)
- (modules netflix)
+(executables
+ (names netflix prime hbomax appletv popup)
  (modes js)
+ (modules :standard \ omdb storage chrome plugin log transparency)
  (js_of_ocaml
   (flags --opt 3 --target-env browser)
   ;(compilation_mode whole_program)
  )
  (libraries js_of_ocaml js_of_ocaml-lwt lib)
- (preprocess (pps js_of_ocaml-ppx))
-)
-
-(executable
- (name prime)
- (modules prime)
- (modes js)
- (js_of_ocaml
-  (flags --opt 3 --target-env browser)
-  ;(compilation_mode whole_program)
- )
- (libraries js_of_ocaml js_of_ocaml-lwt lib)
- (preprocess (pps js_of_ocaml-ppx))
-)
-
-(executable
- (name hbomax)
- (modules hbomax)
- (modes js)
- (js_of_ocaml
-  (flags --opt 3 --target-env browser)
-  ;(compilation_mode whole_program)
- )
- (libraries js_of_ocaml js_of_ocaml-lwt lib)
- (preprocess (pps js_of_ocaml-ppx))
-)
-
-(executable
- (name popup)
- (modules popup)
- (modes js)
- (js_of_ocaml
-  (flags --opt 3 --target-env browser)
-  ;(compilation_mode whole_program)
- )
- (libraries js_of_ocaml lib)
  (preprocess (pps js_of_ocaml-ppx))
 )
 

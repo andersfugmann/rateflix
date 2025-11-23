@@ -45,13 +45,12 @@ let process_elements ?debug ?sub_selector ?transparent ?(title_attribute="aria-l
   Dom_html.document##querySelectorAll (Js.string selector)
   |> Dom.list_of_nodeList
   |> List.filter_map ~f:(fun elt ->
-      (* We don't need to go look for this. *)
       elt##querySelector (Js.string (Printf.sprintf "[%s]" title_attribute))
       |> Js.Opt.to_option
       |> (function None -> Some elt | Some elt -> Some elt)
       |> Option.map (fun elt -> elt##getAttribute (Js.string title_attribute) |> Js.Opt.to_option)
       |> Option.join
-      |> (fun title ->  Option.iter (fun _ -> Log.log `Info "Found title: %s for %s" (opt_js_str title) selector) debug; title)
+      |> (fun title -> Option.iter (fun _ -> Log.log `Info "Found title: %s for %s" (opt_js_str title) selector) debug; title)
       |> Option.map (fun title -> elt, Js.to_string title)
     )
   |> List.map ~f:(fun (elt, title) ->

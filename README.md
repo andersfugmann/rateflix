@@ -6,6 +6,7 @@ Supported streaming services
 * Netflix
 * HBO Max
 * Prime video
+* Appletv
 
 ## Requirements
 To display rating, you will need an omdb api key.

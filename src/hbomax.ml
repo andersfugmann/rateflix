@@ -60,12 +60,6 @@ let parse_title =
        |> String.concat ~sep:" "
      | false -> title
 
-let add_score_icon ?transparent ~title ~size elt =
-  Log.log `Debug "Lookup title: %s" title;
-  let* rating = Plugin.get_rating title in
-  Plugin.add_rating_badge ?transparent ~size ~rating elt;
-  Lwt.return_unit
-
 
 let has_schedule elt =
   elt##querySelector (Js.string "[data-testid='metadata_schedule']")
@@ -88,23 +82,15 @@ let get_title elt =
   let title = get_title_text elt in
   let title_attr = get_title_attr elt in
   match is_continue_watching_element elt with
-  | true -> title_attr
   | false when Option.is_some title -> title
   | _ -> title_attr
 
-let process ?transparent ~selector ~size () =
-  Dom_html.document##querySelectorAll (Js.string selector)
-  |> Dom.list_of_nodeList
-  |> List.filter ~f:(fun elt -> Plugin.has_imdb_overlay elt |> not)
-  |> List.filter ~f:(fun elt -> has_schedule elt |> not)
-  |> List.filter ~f:(fun elt -> is_episode elt |> not)
-  |> List.filter_map ~f:(fun elt ->
-      let title = get_title elt in
-      Option.map (fun title -> elt, title) title
-    )
-  |> Lwt_list.iter_p (fun (elt, title) ->
-    add_score_icon ?transparent ~title ~size elt
-  )
+let filter (elt, _title) =
+  has_schedule elt |> not &&
+  is_episode elt |> not
+
+let process ?transparent ~selector ~size =
+  Plugin.process ?transparent ~filter ~selector ~title:(`Function get_title) ~size
 
 let process_headings =
   process

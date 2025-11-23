@@ -7,12 +7,7 @@ open! ListLabels
 open! MoreLabels
 open Lib
 
-let add_score_icon ?transparent ~title ~size elt =
-  let* rating = Lib.Plugin.get_rating title in
-  Plugin.add_rating_badge ?transparent ~rating ~size elt;
-  Lwt.return_unit
-
-let is_game el ~title =
+let is_game (el, title) =
   let game_titles = Hashtbl.create 10 in
   let is_mobile_game el =
     el##querySelector (Js.string "[class^='mobile-game-title']")
@@ -25,77 +20,51 @@ let is_game el ~title =
   | false -> false
   | true -> true
 
-
-let process ?transparent ?title_selector ~selector ~title_extract_f ~size () =
-  Dom_html.document##querySelectorAll (Js.string selector)
-  |> Dom.list_of_nodeList
-  |> List.filter ~f:(fun el -> Plugin.has_imdb_overlay el |> not)
-  |> List.filter_map ~f:(fun elt ->
-    (match title_selector with
-     | None -> Some elt
-     | Some selector -> elt##querySelector (Js.string selector) |> Js.Opt.to_option)
-    |> Option.map (fun el ->
-      title_extract_f el
-      |> Js.Opt.to_option
-      |> Option.map Js.to_string
-    )
-    |> Option.join
-    |> Option.map (fun title -> elt, title)
-  )
-  |> List.filter ~f:(fun (elt, title) -> not (is_game ~title elt))
-  |> Lwt_list.iter_p (fun (elt, title) ->
-      add_score_icon ?transparent ~title ~size elt
-  )
+let process = Plugin.process ~filter:(fun e -> is_game e |> not)
 
 let process_billboard () =
   process
     ~selector:"[class='billboard-title']"
     ~title_selector:"[class='title-logo']"
-    ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "title"))
+    ~title:(`Attribute "title")
     ~size:`Large
     ~transparent:false
     ()
 
-let process_details () =
-  let* () =
-    process
-      ~selector:"[class^='previewModal--player_container has-smaller-buttons mini-modal']"
-      ~title_selector:".previewModal--boxart"
-      ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "alt"))
-      ~size:`Medium
-      ~transparent:false
-      ()
-  in
-  let* () =
-    process
-      ~selector:"[class^='previewModal--player_container has-smaller-buttons detail-modal']"
-      ~title_selector:".previewModal--boxart"
-      ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "alt"))
-      ~size:`Large
-      ~transparent:false
-      ()
-  in
-  Lwt.return ()
+let process_details1 =
+  process
+    ~selector:"[class^='previewModal--player_container has-smaller-buttons mini-modal']"
+    ~title_selector:".previewModal--boxart"
+    ~title:(`Attribute "alt")
+    ~size:`Medium
+    ~transparent:false
 
-let process_recommendations () =
+let process_details2 =
+  process
+    ~selector:"[class^='previewModal--player_container has-smaller-buttons detail-modal']"
+    ~title_selector:".previewModal--boxart"
+    ~title:(`Attribute "alt")
+    ~size:`Large
+    ~transparent:false
+
+let process_recommendations =
   process
     ~selector:"[class='titleCard--container']"
-    ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "aria-label"))
+    ~title:(`Attribute "aria-label")
     ~size:`Regular
-    ()
 
-let process_tiles () =
+let process_tiles =
   process
     ~selector:"[class^='title-card']"
     ~title_selector:"[aria-label]"
-    ~title_extract_f:(fun elt -> elt##getAttribute (Js.string "aria-label"))
+    ~title:(`Attribute "aria-label")
     ~size:`Regular
-    ()
 
 let process () =
   let* () = process_billboard () in
   let* () = process_recommendations () in
-  let* () = process_details () in
+  let* () = process_details1 () in
+  let* () = process_details2 () in
   let* () = process_tiles () in
   Lwt.return_unit
 
