@@ -8,8 +8,6 @@ open! MoreLabels
 open Lib
 
 
-(* Seems we can reuse the css *)
-
 (** Add custom CSS for IMDb rating badges on Prime Video *)
 
 let parse_title =
@@ -30,18 +28,12 @@ let parse_title =
 
 let add_score_icon ?transparent ~title ~size elt =
   (* We want to add these to the first child element - if there is any *)
-
   let parsed_title, year = parse_title title in
   let* rating = Plugin.get_rating ?year parsed_title in
-  Log.log `Debug "Add rating for %s: %.1f" title (Option.value ~default:0.0 rating);
   Plugin.add_rating_badge ?transparent ~size ~rating elt;
   Lwt.return_unit
 
-let opt_js_str = function
-  | Some js -> Js.to_string js
-  | None -> "N/A"
-
-let process_elements ?debug ?sub_selector ?transparent ?(title_attribute="aria-label")~selector ~size () =
+let process_elements ?debug ?sub_selector ?transparent ?(title_attribute="aria-label") ~selector ~size () =
   Dom_html.document##querySelectorAll (Js.string selector)
   |> Dom.list_of_nodeList
   |> List.filter_map ~f:(fun elt ->
@@ -50,7 +42,6 @@ let process_elements ?debug ?sub_selector ?transparent ?(title_attribute="aria-l
       |> (function None -> Some elt | Some elt -> Some elt)
       |> Option.map (fun elt -> elt##getAttribute (Js.string title_attribute) |> Js.Opt.to_option)
       |> Option.join
-      |> (fun title -> Option.iter (fun _ -> Log.log `Info "Found title: %s for %s" (opt_js_str title) selector) debug; title)
       |> Option.map (fun title -> elt, Js.to_string title)
     )
   |> List.map ~f:(fun (elt, title) ->
@@ -66,11 +57,6 @@ let process_elements ?debug ?sub_selector ?transparent ?(title_attribute="aria-l
     )
   |> List.filter ~f:(fun (elt, _) -> Plugin.has_imdb_overlay elt |> not)
   |> Lwt_list.iter_p (fun (elt, title) ->
-      let () =
-        match debug with
-        | Some true -> Log.log `Info "Element name: '%s'" (elt##.nodeName |> Js.to_string);
-        | _ -> ()
-      in
       let elt =
         match elt##.nodeName |> Js.to_string with
         | "A" ->
@@ -110,7 +96,7 @@ let process_tiles () =
 let process_carousel =
   process_elements
     ~selector:"[data-testid$='carousel-card']"
-    ~size:`Large
+    ~size:`Regular
 
 
 let process_hero_card =

@@ -224,12 +224,14 @@ let process ?transparent ?title_selector ?sub_selector ?(filter=(fun (_, _) -> t
   in
 
   let title_selector = match title_selector with
+    | None -> fun elt -> Some elt
     | Some selector ->
       let selector = Js.string selector in
-      fun elt -> elt##querySelector selector |> Js.Opt.to_option
-    | None -> fun elt -> Some elt
+      fun elt ->
+        match elt##querySelector selector |> Js.Opt.to_option with
+        | None -> Some elt
+        | Some elt -> Some elt
   in
-
   fun () ->
     Dom_html.document##querySelectorAll (Js.string selector)
     |> Dom.list_of_nodeList
