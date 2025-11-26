@@ -85,22 +85,23 @@ let get_title elt =
   | false when Option.is_some title -> title
   | _ -> title_attr
 
-let filter (elt, _title) =
-  has_schedule elt |> not &&
-  is_episode elt |> not
-
-let process ?transparent ~selector ~size =
-  Plugin.process ?transparent ~filter ~selector ~title:(`Function get_title) ~size
+let exclude elt =
+  has_schedule elt || is_episode elt
 
 let process_headings =
-  process
+  Plugin.process
     ~selector:"[role='heading']"
+    ~exclude:(`Function exclude)
+    ~title:(`Function get_title)
     ~size:`Medium
     ~transparent:false
 
+
 let process_tiles =
-  process
+  Plugin.process
     ~selector:"[data-sonic-type='show'], [data-sonic-type='video']"
+    ~exclude:(`Function exclude)
+    ~title:(`Function get_title)
     ~size:`Regular
 
 (* Main processing function that runs on every iteration *)

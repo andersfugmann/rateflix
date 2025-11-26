@@ -26,11 +26,11 @@ let process_item2 =
 
 let process_tabpanel =
   Plugin.process
-      ~selector:"[role='tabpanel']"
-      ~title_selector:"[aria-label]"
-      ~title:(`Attribute "aria-label")
-      ~size:`Large
-      ~transparent:false
+    ~selector:"[role='tabpanel']"
+    ~title_selector:"[aria-label]"
+    ~title:(`Attribute "aria-label")
+    ~size:`Large
+    ~transparent:false
 
 let process () =
   let* () = process_item () in

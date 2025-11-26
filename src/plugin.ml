@@ -7,7 +7,7 @@ open! ListLabels
 open! MoreLabels
 
 (** Set to true to not call omdb, but return a rating derived from the title *)
-let debug = false
+let debug = true
 
 (** Add custom CSS for rating badges *)
 let add_custom_styles () =
@@ -21,7 +21,6 @@ let add_custom_styles () =
       font-size: 16px;
       top: 16px;
       right: 60px;
-      z-index: 100;
     }
 
     .imdb-rating-overlay.medium-badge {
@@ -30,7 +29,6 @@ let add_custom_styles () =
       font-size: 12px;
       top: 12px;
       right: 12px;
-      z-index: 100;
     }
 
     .imdb-rating-overlay.regular-badge {
@@ -39,7 +37,6 @@ let add_custom_styles () =
       width: 20px;
       height: 20px;
       font-size: 10px;
-      z-index: 100;
     }
 
     .imdb-rating-overlay {
@@ -53,7 +50,7 @@ let add_custom_styles () =
       font-weight: bold;
       box-shadow: 0px 2px 8px rgba(0,0,0,0.15);
       z-index: 0;
-      pointer-events: none;
+      pointer-events: auto;
     }
 
     .movie.overlay {
@@ -64,12 +61,12 @@ let add_custom_styles () =
       height: 100%;
       width: 100%;
       background: rgba(0, 0, 0, var(--transparency));
-      pointer-events: none;
+      pointer-events: auto;
+      z-index: 0;
     }
-    .movie.overlay1 {
-      background: gradient(circle, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.7) 100%);
+    .movie.overlay:hover {
+        background-color: rgba(0,0,0,0); /* remove transparency on hover */
     }
-
   |}
   in
 
@@ -90,7 +87,23 @@ let rec get_parent: level:int -> Dom_html.element Js.t -> Dom_html.element Js.t 
     in
     get_parent ~level:(level - 1) parent
 
-let add_rating_badge ?(transparent=true) ~size ~rating elt =
+let add_rating_badge ?debug ?(transparent=true) ?z_index ~title ~size ~rating ~rating_elt ~transparency_elt () =
+  (* We need a div generator *)
+  let add_debug elt = match debug with
+    | Some message ->
+      elt##setAttribute (Js.string "rateflix") (Js.string message)
+    | None -> ()
+  in
+  let add_title elt =
+    elt##setAttribute (Js.string "title") (Js.string title)
+  in
+  let set_z_index elt = match z_index with
+    | None -> ()
+    | Some index ->
+      elt##.style##setProperty (Js.string "z-index") (Js.string (string_of_int index))
+        Js.Optdef.empty |> ignore
+  in
+
   let class_name =
     let size = match size with
       | `Regular -> "regular"
@@ -114,25 +127,31 @@ let add_rating_badge ?(transparent=true) ~size ~rating elt =
       div##.className := (Js.string "movie overlay");
       div##setAttribute (Js.string "imdb-rating") (Js.string rating_text);
       div##.style##setProperty (Js.string "--transparency") (Js.string (Printf.sprintf "%.5f" transparency)) Js.Optdef.empty |> ignore;
-      Dom.appendChild elt div
+      add_debug div;
+      add_title div;
+      set_z_index div;
+      Dom.appendChild transparency_elt div
     | _ -> ()
   in
 
   let div = Dom_html.createSpan doc in
   div##.textContent := Js.some (Js.string rating_text);
   div##.className := Js.string class_name;
+  add_debug div;
+  add_title div;
+  set_z_index div;
   let () =
-    match elt##.style##.position |> Js.to_string with
-    | "" -> elt##.style##.position := Js.string "relative";
+    match rating_elt##.style##.position |> Js.to_string with
+    | "" -> rating_elt##.style##.position := Js.string "relative";
     | _ -> ()
   in
-  Dom.appendChild elt div
+  Dom.appendChild rating_elt div
 
 
 let has_imdb_overlay =
-  let query = Js.string ".imdb-rating-overlay" in
-  fun (el : Dom_html.element Js.t) ->
-    el##querySelector query
+  let query = Js.string "[class^='imdb-rating-overlay']" in
+  fun elt ->
+    elt##querySelector query
     |> Js.Opt.test
 
 let fetch_imdb_rating =
@@ -191,8 +210,9 @@ let get_rating ?year title =
 
 let get_rating = match debug with
   | false -> get_rating
-  | true -> fun ?year:_ title ->
-    Log.log `Info "Get rating for title: '%s'" title;
+  | true -> fun ?year title ->
+    let year = Option.map (Printf.sprintf ": Year %d") year |> Option.value ~default:"" in
+    Log.log `Info "Get rating for title: '%s'%s" title year;
     Digest.MD5.string title
     |> Digest.MD5.to_hex
     |> String.fold_left ~init:0 ~f:(fun acc c -> acc + Char.code c)
@@ -201,18 +221,43 @@ let get_rating = match debug with
     |> Option.some
     |> Lwt.return
 
-let add_score_icon ?transparent ~title ~size elt =
-  let* rating = get_rating title in
-  add_rating_badge ?transparent ~rating ~size elt;
+let add_score_icon ?debug ?transparent ?z_index ~rating_elt ~transparency_elt ?year ~title ~size () =
+  let* rating = get_rating ?year title in
+  add_rating_badge ?debug ?transparent ?z_index ~title ~rating ~rating_elt ~transparency_elt ~size ();
   Lwt.return_unit
 
-let process ?transparent ?title_selector ?sub_selector ?(filter=(fun (_, _) -> true)) ~selector ~title ~size =
-  let sub_selector = match sub_selector with
+
+let debug_e ?debug ~msg elt =
+  Option.iter (function false -> () | true -> Console.console##info_2 (Js.string msg) elt) debug;
+  elt
+
+let debug_l ?debug ~msg elts =
+  match debug with
+  | Some true ->
+    List.iter ~f:(fun elt -> Console.console##info_2 (Js.string msg) elt) elts;
+    elts
+  | _ -> elts
+
+(* What is the relation between a sub-selector and title selector?
+   Selector: Find appropiate subtree
+   Exclude: If matched, then exclude!
+   Title_selector: Where to find the title
+   Sub_selector: Where to place the ratings - That should be called rating selector.
+   transparency_selector: Where to place transparency (if enabled).
+   filter: Filter based on which element. That must be the overall tree!
+   parent: How many levels up from selector
+*)
+let process ?debug ?(parent=0) ?transparent ?rating_selector ?title_selector ?transparency_selector ?exclude ?(filter=(fun (_, _) -> true)) ?z_index ?(parse_title=(fun t -> t, None)) ~selector ~title ~size =
+  let title_selector_s = Option.value ~default:"<unset>" title_selector in
+  let get_selector = function
     | None -> fun elt -> elt
     | Some selector ->
       let selector = Js.string selector in
       fun elt -> elt##querySelector selector |> Js.Opt.to_option |> Option.value ~default:elt
   in
+  let rating_selector = get_selector rating_selector in
+  let transparency_selector = get_selector transparency_selector in
+
   let extract_title = match title with
     | `Attribute attr ->
       let attr = Js.string attr in
@@ -232,21 +277,43 @@ let process ?transparent ?title_selector ?sub_selector ?(filter=(fun (_, _) -> t
         | None -> Some elt
         | Some elt -> Some elt
   in
+  let exclude = match exclude with
+    | None -> fun _ -> false
+    | Some `Function f -> fun elt -> f elt
+    | Some `Attribute (attr, values) ->
+      let attr = Js.string attr in
+      fun elt ->
+        elt##getAttribute attr
+        |> Js.Opt.to_option
+        |> Option.map (fun v -> Js.to_string v)
+        |> Option.map (fun v -> List.exists ~f:(String.equal v) values)
+        |> Option.value ~default:false
+    | Some `Exists xpaths ->
+      let xpaths = List.map ~f:Js.string xpaths in
+      fun elt ->
+        List.exists ~f:(fun xpath ->
+            elt##querySelector xpath
+            |> Js.Opt.test
+          ) xpaths
+  in
   fun () ->
     Dom_html.document##querySelectorAll (Js.string selector)
     |> Dom.list_of_nodeList
-    |> List.filter ~f:(fun el -> has_imdb_overlay el |> not)
+    |> List.map ~f:(get_parent ~level:parent)
+    |> debug_l ?debug ~msg:"Element: "
+    |> List.filter ~f:(fun elt -> exclude elt |> not)
+    |> List.filter ~f:(fun elt -> has_imdb_overlay elt |> not)
     |> List.filter_map ~f:(fun elt ->
         title_selector elt
+        |> Option.map (fun title_elt -> debug_e ?debug ~msg:title_selector_s title_elt)
         |> Option.map (fun title_elt -> extract_title title_elt)
         |> Option.join
-        |> (fun title -> (match title with None -> Log.log `Info "No title found: %s" selector; Console.console##info elt | Some title -> Log.log `Info "Found title for %s: %s" selector title); title)
         |> Option.map (fun title -> elt, title)
       )
-    |> List.filter ~f:(fun (elt, title) -> match filter (elt, title) with false -> Log.log `Info "Filtered title: %s" title; false | true -> true)
-    |> List.map ~f:(fun (elt, title) -> (sub_selector elt, title))
-    |> Lwt_list.iter_p (fun (elt, title) ->
-        add_score_icon ?transparent ~title ~size elt
+    |> List.filter ~f:(fun (elt, title) -> filter (elt, title))
+    |> List.map ~f:(fun (elt, title) -> (rating_selector elt, transparency_selector elt, parse_title title))
+    |> Lwt_list.iter_p (fun (rating_elt, transparency_elt, (title, year)) ->
+        add_score_icon ~debug:selector ?transparent ?z_index ?year ~title ~rating_elt ~transparency_elt ~size ()
       )
 
 let rec daemon ~f condition () =
