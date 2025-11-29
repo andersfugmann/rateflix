@@ -7,7 +7,7 @@ open! ListLabels
 open! MoreLabels
 
 (** Set to true to not call omdb, but return a rating derived from the title *)
-let debug = true
+let debug = false
 
 (** Add custom CSS for rating badges *)
 let add_custom_styles () =
