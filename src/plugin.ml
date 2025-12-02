@@ -87,7 +87,7 @@ let rec get_parent: level:int -> Dom_html.element Js.t -> Dom_html.element Js.t 
     in
     get_parent ~level:(level - 1) parent
 
-let add_rating_badge ?debug ?(transparent=true) ?z_index ~title ~size ~rating ~rating_elt ~transparency_elt () =
+let add_rating_badge ?debug ?(transparent=true) ?z_index ?border_radius ~title ~size ~rating ~rating_elt ~transparency_elt () =
   (* We need a div generator *)
   let add_debug elt = match debug with
     | Some message ->
@@ -97,12 +97,21 @@ let add_rating_badge ?debug ?(transparent=true) ?z_index ~title ~size ~rating ~r
   let add_title elt =
     elt##setAttribute (Js.string "title") (Js.string title)
   in
+  let set_style ~property ~value elt =
+    elt##.style##setProperty (Js.string property) (Js.string value)
+      Js.Optdef.empty |> ignore
+  in
   let set_z_index elt = match z_index with
     | None -> ()
     | Some index ->
-      elt##.style##setProperty (Js.string "z-index") (Js.string (string_of_int index))
-        Js.Optdef.empty |> ignore
+      set_style ~property:"z-index" ~value:(string_of_int index) elt
   in
+  let set_border_radius elt = match border_radius with
+    | None -> ()
+    | Some radius ->
+      set_style ~property:"border-radius" ~value:(string_of_int radius ^ "px") elt
+  in
+
 
   let class_name =
     let size = match size with
@@ -130,6 +139,7 @@ let add_rating_badge ?debug ?(transparent=true) ?z_index ~title ~size ~rating ~r
       add_debug div;
       add_title div;
       set_z_index div;
+      set_border_radius div;
       Dom.appendChild transparency_elt div
     | _ -> ()
   in
@@ -221,9 +231,9 @@ let get_rating = match debug with
     |> Option.some
     |> Lwt.return
 
-let add_score_icon ?debug ?transparent ?z_index ~rating_elt ~transparency_elt ?year ~title ~size () =
+let add_score_icon ?debug ?transparent ?z_index ?border_radius ~rating_elt ~transparency_elt ?year ~title ~size () =
   let* rating = get_rating ?year title in
-  add_rating_badge ?debug ?transparent ?z_index ~title ~rating ~rating_elt ~transparency_elt ~size ();
+  add_rating_badge ?debug ?transparent ?z_index ?border_radius ~title ~rating ~rating_elt ~transparency_elt ~size ();
   Lwt.return_unit
 
 
@@ -247,7 +257,7 @@ let debug_l ?debug ~msg elts =
    filter: Filter based on which element. That must be the overall tree!
    parent: How many levels up from selector
 *)
-let process ?debug ?(parent=0) ?transparent ?rating_selector ?title_selector ?transparency_selector ?exclude ?(filter=(fun (_, _) -> true)) ?z_index ?(parse_title=(fun t -> t, None)) ~selector ~title ~size =
+let process ?debug ?(parent=0) ?transparent ?rating_selector ?title_selector ?transparency_selector ?exclude ?(filter=(fun (_, _) -> true)) ?z_index ?border_radius ?(parse_title=(fun t -> t, None)) ~selector ~title ~size =
   let title_selector_s = Option.value ~default:"<unset>" title_selector in
   let get_selector = function
     | None -> fun elt -> elt
@@ -265,6 +275,8 @@ let process ?debug ?(parent=0) ?transparent ?rating_selector ?title_selector ?tr
         elt##getAttribute attr
         |> Js.Opt.to_option
         |> Option.map Js.to_string
+        |> Option.map String.trim
+        |> (function Some "" -> None | x -> x)
     | `Function f -> fun elt -> f elt
   in
 
@@ -277,10 +289,9 @@ let process ?debug ?(parent=0) ?transparent ?rating_selector ?title_selector ?tr
         | None -> Some elt
         | Some elt -> Some elt
   in
-  let exclude = match exclude with
-    | None -> fun _ -> false
-    | Some `Function f -> fun elt -> f elt
-    | Some `Attribute (attr, values) ->
+  let rec exclude_f = function
+    | `Function f -> fun elt -> f elt
+    | `Attribute (attr, values) ->
       let attr = Js.string attr in
       fun elt ->
         elt##getAttribute attr
@@ -288,14 +299,23 @@ let process ?debug ?(parent=0) ?transparent ?rating_selector ?title_selector ?tr
         |> Option.map (fun v -> Js.to_string v)
         |> Option.map (fun v -> List.exists ~f:(String.equal v) values)
         |> Option.value ~default:false
-    | Some `Exists xpaths ->
-      let xpaths = List.map ~f:Js.string xpaths in
+    | `Exists xpath ->
+      let xpath = Js.string xpath in
       fun elt ->
-        List.exists ~f:(fun xpath ->
-            elt##querySelector xpath
-            |> Js.Opt.test
-          ) xpaths
+        elt##querySelector xpath |> Js.Opt.test
+    | `Closest xpath ->
+      let xpath = Js.string xpath in
+      fun elt ->
+        elt##closest xpath |> Js.Opt.test
+    | `List excludes ->
+      let excludes = List.map ~f:exclude_f excludes in
+      fun elt -> List.exists ~f:(fun exclude -> exclude elt) excludes
   in
+  let exclude =
+    let exclude = Option.value ~default:(`List []) exclude in
+    exclude_f exclude
+  in
+
   fun () ->
     Dom_html.document##querySelectorAll (Js.string selector)
     |> Dom.list_of_nodeList
@@ -313,7 +333,7 @@ let process ?debug ?(parent=0) ?transparent ?rating_selector ?title_selector ?tr
     |> List.filter ~f:(fun (elt, title) -> filter (elt, title))
     |> List.map ~f:(fun (elt, title) -> (rating_selector elt, transparency_selector elt, parse_title title))
     |> Lwt_list.iter_p (fun (rating_elt, transparency_elt, (title, year)) ->
-        add_score_icon ~debug:selector ?transparent ?z_index ?year ~title ~rating_elt ~transparency_elt ~size ()
+        add_score_icon ~debug:selector ?transparent ?z_index ?border_radius ?year ~title ~rating_elt ~transparency_elt ~size ()
       )
 
 let rec daemon ~f condition () =

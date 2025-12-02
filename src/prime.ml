@@ -67,7 +67,7 @@ let process_detailed_info =
     ~title_selector:"[data-testid='base-image']"
     ~title:(`Attribute "alt")
     ~parse_title
-    ~exclude:(`Exists ["aria-label=['UPCOMING']"; "aria-label=['REPLAY']"])
+    ~exclude:(`Exists "[aria-label='UPCOMING', [aria-label='REPLAY']")
     ~size:`Large
     ~transparent:false
     ~z_index:5
