@@ -14,7 +14,7 @@ let process_item =
     ~title:(`Attribute "alt")
     ~size:`Regular
     ~z_index:2
-    ~transparent:true
+(*    ~transparent:true *)
 
 let process_item2 =
   Plugin.process
@@ -23,13 +23,13 @@ let process_item2 =
     ~title:(`Attribute "aria-label")
     ~exclude:(`List
                 [`Exists "[data-testid='person-lockup'], [data-testid='how-to-watch-card']";
-                 `Closest "[aria-label='Trailers'], [aria-label='Episodes'], [aria-label='Bonus Content']"
+                 `Closest "[aria-label='Trailers'], [aria-label='Episodes'], [aria-label='Bonus Content'], [aria-label^='Continue Watching']"
                 ]
              )
     ~size:`Regular
     ~z_index:2
-    ~border_radius:14
-    ~transparent:true
+    (* ~border_radius:14
+       ~transparent:true *)
 
 let process_tabpanel =
   Plugin.process
@@ -37,7 +37,7 @@ let process_tabpanel =
     ~title_selector:"[aria-label]"
     ~title:(`Attribute "aria-label")
     ~size:`Large
-    ~transparent:true
+(* ~transparent:true *)
 
 
 let process_main =
@@ -47,7 +47,7 @@ let process_main =
     ~title:(`Attribute "alt")
     ~size:`Regular
     ~z_index:1
-    ~transparent:false
+(* ~transparent:false *)
 
 
 let process () =
