@@ -7,6 +7,7 @@
   prime.bc.js
   hbomax.bc.js
   appletv.bc.js
+  disneyplus.bc.js
   popup.bc.js
   icons/icon.svg
   icons/icon16.png
@@ -42,6 +43,11 @@
 (rule
  (targets appletv.bc.js)
  (deps ../src/appletv.bc.js)
+ (action (copy %{deps} %{targets})))
+
+(rule
+ (targets disneyplus.bc.js)
+ (deps ../src/disneyplus.bc.js)
  (action (copy %{deps} %{targets})))
 
 

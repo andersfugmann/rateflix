@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Rateflix",
-  "version": "0.1",
+  "version": "0.9",
   "description": "Adds IMDb scores to streaming services using omdb",
   "content_scripts": [
     {
@@ -19,6 +19,10 @@
     {
       "matches": ["*://tv.apple.com/*"],
       "js": ["appletv.bc.js"]
+    },
+    {
+      "matches": ["*://*.disneyplus.com/*"],
+      "js": ["disneyplus.bc.js"]
     }
   ],
   "action": {
@@ -36,5 +40,5 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": [ "storage", "tabs", "activeTab" ]
+  "permissions": [ "storage" ]
 }
