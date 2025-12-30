@@ -20,11 +20,11 @@ let parse_title =
     [ "Season Finale Badge";
       "New Episode Badge";
       "New Series Badge";
-      "Season Finale Badge";
+      "Mid-Season Finale Badge";
     ]
   in
-  let title_patterns =
-    [ "Season [0-9]+ Episode [0-9]+ ";
+  let title_postfixes =
+    [ "Season [0-9]+ Episode [0-9]+";
       "Select for details on this title";
       "All Episodes";
       "New Episode Every";
@@ -35,56 +35,68 @@ let parse_title =
       "Hulu Original";
       "Mid-Season Finale";
       "Season Finale Badge";
+      "Upcoming [0-9]+/[0-9]+ [|]"
     ]
     |> List.map ~f:Regexp.regexp
   in
 
 
   let parse title =
-    let title =
-      let rec inner title unmatched = function
-        | prefix :: xs when String.starts_with ~prefix title ->
-          let title' =
-            String.sub ~pos:0 ~len:(String.length prefix) title
-            |> String.trim
-          in
-          inner title' [] (unmatched @ xs)
-        | x :: xs -> inner title (x :: unmatched) xs
-        | [] -> title
-      in
-      inner title [] title_prefixes
+    let rec inner title unmatched = function
+      | prefix :: xs when String.starts_with ~prefix title ->
+        let title' =
+          String.sub ~pos:0 ~len:(String.length prefix) title
+          |> String.trim
+        in
+        inner title' [] (unmatched @ xs)
+      | x :: xs -> inner title (x :: unmatched) xs
+      | [] -> title
     in
+
+    let title = inner title [] title_prefixes in
 
     let index =
       List.fold_left ~init:None ~f:(fun acc re ->
           match acc, Regexp.search re title 0 with
-          | Some n, Some (m, _)  when m < n -> Some m
+          | Some n, Some (m, result) when Regexp.matched_string result != "" && m < n -> Some m
           | None, Some (m, _) -> Some m
           | _ -> acc
-        ) title_patterns
+        ) title_postfixes
     in
     match index with
     | None -> title
-    | Some len -> String.sub ~pos:0 ~len title
+    | Some len ->
+      String.sub ~pos:0 ~len title
   in
   fun title ->
     parse title |> String.trim, None
 
-let process_item =
+let process_carousel =
   Plugin.process
-    ~selector:"[data-testid='set-shelf-item']"
-    ~title_selector:"[alt]"
-    ~title:(`Attribute "alt")
-    ~size:`Regular
+    ~selector:"[data-testid='hero-carousel-shelf-item']"
+    ~title_selector:"[aria-label]"
+    ~title:(`Attribute "aria-label")
+    ~size:`Large
     ~parse_title
     ~z_index:2
     ~transparent:false
+
+let process_item =
+  Plugin.process
+    ~selector:"[data-testid='set-item']"
+    ~title_selector:"[alt]"
+    ~title:(`Attribute "alt")
+    ~size:`Regular
+    ~exclude:(`Closest "[data-testid='hero-carousel-shelf-item']")
+    (* ~parse_title *)
+    ~z_index:2
 
 let process_item2 =
   Plugin.process
     ~selector:"[data-testid='set-item']"
     ~title:(`Attribute "aria-label")
     ~size:`Regular
+    ~exclude:(`Closest "[data-testid='hero-carousel-shelf-item']")
     ~parse_title
     ~z_index:2
 
@@ -94,12 +106,13 @@ let process_details =
     ~title_selector:"[alt]"
     ~title:(`Attribute "alt")
     ~size:`Regular
-    ~parse_title
+    (* ~parse_title *)
     ~z_index:2
     ~transparent:false
 
 
 let process () =
+  let* () = process_carousel () in
   let* () = process_item () in
   let* () = process_item2 () in
   let* () = process_details () in

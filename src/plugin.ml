@@ -237,9 +237,10 @@ let add_score_icon ?debug ?transparent ?z_index ?border_radius ~rating_elt ~tran
   Lwt.return_unit
 
 
-let debug_e ?debug ~msg elt =
-  Option.iter (function false -> () | true -> Console.console##info_2 (Js.string msg) elt) debug;
-  elt
+let debug_e ~debug ~msg elt =
+  match debug with
+  | false -> elt
+  | true -> Console.console##info_2 (Js.string msg) elt; elt
 
 let debug_l ?debug ~msg elts =
   match debug with
@@ -257,8 +258,7 @@ let debug_l ?debug ~msg elts =
    filter: Filter based on which element. That must be the overall tree!
    parent: How many levels up from selector
 *)
-let process ?debug ?(parent=0) ?transparent ?rating_selector ?title_selector ?transparency_selector ?exclude ?(filter=(fun (_, _) -> true)) ?z_index ?border_radius ?(parse_title=(fun t -> t, None)) ~selector ~title ~size =
-  let title_selector_s = Option.value ~default:"<unset>" title_selector in
+let process ?(parent=0) ?transparent ?rating_selector ?title_selector ?transparency_selector ?exclude ?(filter=(fun (_, _) -> true)) ?z_index ?border_radius ?(parse_title=(fun t -> t, None)) ~selector ~title ~size =
   let get_selector = function
     | None -> fun elt -> elt
     | Some selector ->
@@ -268,7 +268,8 @@ let process ?debug ?(parent=0) ?transparent ?rating_selector ?title_selector ?tr
   let rating_selector = get_selector rating_selector in
   let transparency_selector = get_selector transparency_selector in
 
-  let extract_title = match title with
+  let extract_title =
+    match title with
     | `Attribute attr ->
       let attr = Js.string attr in
       fun elt ->
@@ -277,17 +278,21 @@ let process ?debug ?(parent=0) ?transparent ?rating_selector ?title_selector ?tr
         |> Option.map Js.to_string
         |> Option.map String.trim
         |> (function Some "" -> None | x -> x)
-    | `Function f -> fun elt -> f elt
+    | `Function f -> fun elt ->
+      f elt
+      |> Option.map String.trim
+      |> (function Some "" -> None | x -> x)
   in
 
+  (* Get all elements that matches, or current element if no title selector is set *)
   let title_selector = match title_selector with
-    | None -> fun elt -> Some elt
+    | None -> fun elt -> [ elt ]
     | Some selector ->
       let selector = Js.string selector in
       fun elt ->
-        match elt##querySelector selector |> Js.Opt.to_option with
-        | None -> Some elt
-        | Some elt -> Some elt
+        match elt##querySelectorAll selector |> Dom.list_of_nodeList with
+        | [] -> [ elt ]
+        | elts -> elts
   in
   let rec exclude_f = function
     | `Function f -> fun elt -> f elt
@@ -316,22 +321,30 @@ let process ?debug ?(parent=0) ?transparent ?rating_selector ?title_selector ?tr
     exclude_f exclude
   in
 
+  let get_title elt =
+    title_selector elt
+    |> List.find_map ~f:(fun elt ->
+        extract_title elt
+        |> Option.map parse_title
+        |> Option.map (fun (title, year) -> String.trim title, year)
+        |> function
+        | Some (title, _) when String.length title = 0 -> None
+        | v -> v
+      )
+  in
+
   fun () ->
     Dom_html.document##querySelectorAll (Js.string selector)
     |> Dom.list_of_nodeList
     |> List.map ~f:(get_parent ~level:parent)
-    |> debug_l ?debug ~msg:"Element: "
     |> List.filter ~f:(fun elt -> exclude elt |> not)
     |> List.filter ~f:(fun elt -> has_imdb_overlay elt |> not)
     |> List.filter_map ~f:(fun elt ->
-        title_selector elt
-        |> Option.map (fun title_elt -> debug_e ?debug ~msg:title_selector_s title_elt)
-        |> Option.map (fun title_elt -> extract_title title_elt)
-        |> Option.join
+        get_title elt
         |> Option.map (fun title -> elt, title)
       )
-    |> List.filter ~f:(fun (elt, title) -> filter (elt, title))
-    |> List.map ~f:(fun (elt, title) -> (rating_selector elt, transparency_selector elt, parse_title title))
+    |> List.filter ~f:filter
+    |> List.map ~f:(fun (elt, title) -> (rating_selector elt, transparency_selector elt, title))
     |> Lwt_list.iter_p (fun (rating_elt, transparency_elt, (title, year)) ->
         add_score_icon ~debug:selector ?transparent ?z_index ?border_radius ?year ~title ~rating_elt ~transparency_elt ~size ()
       )

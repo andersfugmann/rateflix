@@ -71,7 +71,6 @@ let process_detailed_info =
     ~size:`Large
     ~transparent:false
     ~z_index:5
-    ~debug:true
 
 
 let process () =
