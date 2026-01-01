@@ -50,7 +50,7 @@ let add_custom_styles () =
       font-weight: bold;
       box-shadow: 0px 2px 8px rgba(0,0,0,0.15);
       z-index: 0;
-      pointer-events: auto;
+      pointer-events: none;
     }
 
     .movie.overlay {
@@ -61,11 +61,8 @@ let add_custom_styles () =
       height: 100%;
       width: 100%;
       background: rgba(0, 0, 0, var(--transparency));
-      pointer-events: auto;
+      pointer-events: none;
       z-index: 0;
-    }
-    .movie.overlay:hover {
-        background-color: rgba(0,0,0,0); /* remove transparency on hover */
     }
   |}
   in
@@ -86,6 +83,19 @@ let rec get_parent: level:int -> Dom_html.element Js.t -> Dom_html.element Js.t 
       |> Option.value ~default:elt
     in
     get_parent ~level:(level - 1) parent
+
+let update_opacity elt = Dom_html.handler (fun event ->
+    let opacity =
+      match event##._type |> Js.to_string with
+      | "mouseover" -> Some "0"
+      | "mouseout" -> Some "1"
+      | _ -> None
+    in
+    Option.iter (fun opacity ->
+        elt##.style##.opacity := Js.string opacity;
+      ) opacity;
+    Js._true
+  )
 
 let add_rating_badge ?debug ?(transparent=true) ?z_index ?border_radius ~title ~size ~rating ~rating_elt ~transparency_elt () =
   (* We need a div generator *)
@@ -128,10 +138,12 @@ let add_rating_badge ?debug ?(transparent=true) ?z_index ?border_radius ~title ~
 
   let doc = Dom_html.document in
 
+  (* Just add transparency class *)
   let () =
     match rating, transparent with
     | Some rating, true ->
       let transparency = Transparency.(calculate default rating) in
+
       let div = Dom_html.createSpan doc in
       div##.className := (Js.string "movie overlay");
       div##setAttribute (Js.string "imdb-rating") (Js.string rating_text);
@@ -140,7 +152,12 @@ let add_rating_badge ?debug ?(transparent=true) ?z_index ?border_radius ~title ~
       add_title div;
       set_z_index div;
       set_border_radius div;
-      Dom.appendChild transparency_elt div
+
+      transparency_elt##.onmouseover := (update_opacity div);
+      transparency_elt##.onmouseout := (update_opacity div);
+
+      Dom.appendChild transparency_elt div;
+
     | _ -> ()
   in
 
@@ -175,12 +192,10 @@ let fetch_imdb_rating =
         | true -> ()
       end;
       result
-      (* If the promise has been fulfilled, then remove it from the table *)
     | None ->
       let result = Omdb.fetch_imdb_rating ?year title in
       Hashtbl.add in_progress ~key:(title, year) ~data:result;
       result
-
 
 let ratelimited = ref false
 let get_rating ?year title =
@@ -294,33 +309,38 @@ let process ?(parent=0) ?transparent ?rating_selector ?title_selector ?transpare
         | [] -> [ elt ]
         | elts -> elts
   in
-  let rec exclude_f = function
-    | `Function f -> fun elt -> f elt
-    | `Attribute (attr, values) ->
-      let attr = Js.string attr in
-      fun elt ->
-        elt##getAttribute attr
-        |> Js.Opt.to_option
-        |> Option.map (fun v -> Js.to_string v)
-        |> Option.map (fun v -> List.exists ~f:(String.equal v) values)
-        |> Option.value ~default:false
-    | `Exists xpath ->
-      let xpath = Js.string xpath in
-      fun elt ->
-        elt##querySelector xpath |> Js.Opt.test
-    | `Closest xpath ->
-      let xpath = Js.string xpath in
-      fun elt ->
-        elt##closest xpath |> Js.Opt.test
-    | `List excludes ->
-      let excludes = List.map ~f:exclude_f excludes in
-      fun elt -> List.exists ~f:(fun exclude -> exclude elt) excludes
-  in
   let exclude =
-    let exclude = Option.value ~default:(`List []) exclude in
-    exclude_f exclude
+    let exclude_f = function
+      | `Function f -> fun elt -> f elt
+      | `Attribute (attr, values) ->
+        let attr = Js.string attr in
+        fun elt ->
+          elt##getAttribute attr
+          |> Js.Opt.to_option
+          |> Option.map (fun v -> Js.to_string v)
+          |> Option.map (fun v -> List.exists ~f:(String.equal v) values)
+          |> Option.value ~default:false
+      | `Exists xpath ->
+        let xpath = Js.string xpath in
+        fun elt ->
+          elt##querySelector xpath |> Js.Opt.test
+      | `Closest xpath ->
+        let xpath = Js.string xpath in
+        fun elt ->
+          elt##closest xpath |> Js.Opt.test
+      | `Page_title pattern ->
+        let pattern = Regexp.regexp pattern in
+        fun _ ->
+          let title = Dom_html.document##.title |> Js.to_string in
+          Regexp.string_match pattern title 0
+          |> Option.is_some
+    in
+    let excludes =
+      Option.value ~default:[] exclude
+      |> List.map ~f:exclude_f
+    in
+    fun elt -> List.exists ~f:(fun exclude -> exclude elt) excludes
   in
-
   let get_title elt =
     title_selector elt
     |> List.find_map ~f:(fun elt ->

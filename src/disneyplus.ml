@@ -87,7 +87,7 @@ let process_item =
     ~title_selector:"[alt]"
     ~title:(`Attribute "alt")
     ~size:`Regular
-    ~exclude:(`Closest "[data-testid='hero-carousel-shelf-item']")
+    ~exclude:[`Closest "[data-testid='hero-carousel-shelf-item']"]
     (* ~parse_title *)
     ~z_index:2
 
@@ -96,7 +96,7 @@ let process_item2 =
     ~selector:"[data-testid='set-item']"
     ~title:(`Attribute "aria-label")
     ~size:`Regular
-    ~exclude:(`Closest "[data-testid='hero-carousel-shelf-item']")
+    ~exclude:[`Closest "[data-testid='hero-carousel-shelf-item']"]
     ~parse_title
     ~z_index:2
 

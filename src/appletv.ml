@@ -7,53 +7,79 @@ open! ListLabels
 open! MoreLabels
 open Lib
 
+let exclude =
+  let parents =
+    ["Trailers";
+     "Episodes";
+     "Bonus Content";
+     "Continue Watching";]
+  in
+  let childs =
+    [ "person-lockup";
+      "how-to-watch-card";
+      "epic-showcase-item";
+    ]
+  in
+
+  let closest =
+    List.map ~f:(Printf.sprintf "[aria-label^='%s']") parents
+    |> String.concat ~sep:", "
+  in
+  let exists =
+    List.map ~f:(Printf.sprintf "[data-testid^='%s']") childs
+    |> String.concat ~sep:", "
+  in
+  [ `Closest closest;
+    `Exists exists;
+    `Page_title "MLS .*"
+  ]
+
+
 let process_item =
   Plugin.process
     ~selector:"[slot='item'], [name='item']"
-    ~title_selector:"[class$='artwork-component__contents']"
+    ~title_selector:".artwork-component__contents"
     ~title:(`Attribute "alt")
+    ~exclude:((`Exists "[data-testid='epic-showcase-item']") :: exclude)
     ~size:`Regular
     ~z_index:2
-(*    ~transparent:true *)
+    ~border_radius:14
 
 let process_item2 =
   Plugin.process
-    ~selector:"[slot='item'], [name='item2']"
+    ~selector:"[slot='item'], [process_item2]"
     ~title_selector:"[aria-label]"
     ~title:(`Attribute "aria-label")
-    ~exclude:(`List
-                [`Exists "[data-testid='person-lockup'], [data-testid='how-to-watch-card']";
-                 `Closest "[aria-label='Trailers'], [aria-label='Episodes'], [aria-label='Bonus Content'], [aria-label^='Continue Watching']"
-                ]
-             )
+    ~exclude:((`Exists "[data-testid='epic-showcase-item']") :: exclude)
     ~size:`Regular
     ~z_index:2
-    (* ~border_radius:14
-       ~transparent:true *)
+    ~border_radius:14
 
-let process_tabpanel =
+let process_epic =
   Plugin.process
-    ~selector:"[role='tabpanel']"
+    ~selector:"[slot='item']"
     ~title_selector:"[aria-label]"
     ~title:(`Attribute "aria-label")
-    ~size:`Large
-(* ~transparent:true *)
-
+    ~exclude
+    ~size:`Regular
+    ~z_index:2
+    ~border_radius:20
 
 let process_main =
   Plugin.process
     ~selector:"[class^='content-logo']"
     ~title_selector:"[alt]"
     ~title:(`Attribute "alt")
+    ~exclude
     ~size:`Regular
     ~z_index:1
-(* ~transparent:false *)
+    ~transparent:false
 
 
 let process () =
   let* () = process_item () in
   let* () = process_item2 () in
-  let* () = process_tabpanel () in
+  let* () = process_epic () in
   let* () = process_main () in
   Lwt.return_unit
 

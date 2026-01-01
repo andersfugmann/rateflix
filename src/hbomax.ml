@@ -91,7 +91,7 @@ let exclude elt =
 let process_headings =
   Plugin.process
     ~selector:"[role='heading']"
-    ~exclude:(`Function exclude)
+    ~exclude:[`Function exclude]
     ~title:(`Function get_title)
     ~size:`Medium
     ~transparent:false
@@ -100,7 +100,7 @@ let process_headings =
 let process_tiles =
   Plugin.process
     ~selector:"[data-sonic-type='show'], [data-sonic-type='video']"
-    ~exclude:(`Function exclude)
+    ~exclude:[`Function exclude]
     ~title:(`Function get_title)
     ~size:`Regular
 

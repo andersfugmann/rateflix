@@ -54,7 +54,7 @@ let process_card =
     ~title_selector:"[aria-label]"
     ~title:(`Attribute "aria-label")
     ~parse_title
-    ~exclude:(`Attribute ("data-card-entity-type", ["EVENT"; "LIVE_EVENT_ITEM"; "VOD_EVENT_ITEM"]))
+    ~exclude:[`Attribute ("data-card-entity-type", ["EVENT"; "LIVE_EVENT_ITEM"; "VOD_EVENT_ITEM"])]
     ~size:`Regular
     ~transparent:true
     ~z_index:5
@@ -67,7 +67,7 @@ let process_detailed_info =
     ~title_selector:"[data-testid='base-image']"
     ~title:(`Attribute "alt")
     ~parse_title
-    ~exclude:(`Exists "[aria-label='UPCOMING', [aria-label='REPLAY']")
+    ~exclude:[`Exists "[aria-label='UPCOMING', [aria-label='REPLAY']"]
     ~size:`Large
     ~transparent:false
     ~z_index:5
