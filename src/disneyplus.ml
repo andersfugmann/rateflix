@@ -6,22 +6,14 @@ open! StdLabels
 open! ListLabels
 open! MoreLabels
 open Lib
-(*
-Season 1 Episode 1
-Select for details on this title.
-All Episodes
-New Episode Every
-Rated
-*)
-
 
 let parse_title =
   let title_prefixes =
-    [ "Season Finale Badge";
-      "New Episode Badge";
-      "New Series Badge";
-      "Mid-Season Finale Badge";
+    [ "New [^ ]+ Badge";
+      "[^ ]+ Finale Badge";
+      "Number 1?[0-9]"
     ]
+    |> List.map ~f:Regexp.regexp
   in
   let title_postfixes =
     [ "Season [0-9]+ Episode [0-9]+";
@@ -43,13 +35,18 @@ let parse_title =
 
   let parse title =
     let rec inner title unmatched = function
-      | prefix :: xs when String.starts_with ~prefix title ->
-        let title' =
-          String.sub ~pos:0 ~len:(String.length prefix) title
-          |> String.trim
-        in
-        inner title' [] (unmatched @ xs)
-      | x :: xs -> inner title (x :: unmatched) xs
+      | prefix :: xs -> begin
+          match Regexp.search prefix title 0 with
+          | Some (0, result) ->
+            let len = Regexp.matched_string result |> String.length in
+            let title' =
+              String.sub ~pos:len ~len:(String.length title - len) title
+              |> String.trim
+            in
+            inner title' [] (unmatched @ xs)
+          | _ ->
+            inner title (prefix :: unmatched) xs
+        end
       | [] -> title
     in
 
@@ -59,7 +56,7 @@ let parse_title =
       List.fold_left ~init:None ~f:(fun acc re ->
           match acc, Regexp.search re title 0 with
           | Some n, Some (m, result) when Regexp.matched_string result != "" && m < n -> Some m
-          | None, Some (m, _) -> Some m
+          | None, Some (m, result) when Regexp.matched_string result != "" -> Some m
           | _ -> acc
         ) title_postfixes
     in
@@ -87,8 +84,8 @@ let process_item =
     ~title_selector:"[alt]"
     ~title:(`Attribute "alt")
     ~size:`Regular
-    ~exclude:[`Closest "[data-testid='hero-carousel-shelf-item']"]
-    (* ~parse_title *)
+    ~exclude:[`Closest "[data-testid='hero-carousel-shelf-item']";
+              `Exists "[data-testid='set-item-rating']"]
     ~z_index:2
 
 let process_item2 =
@@ -106,7 +103,6 @@ let process_details =
     ~title_selector:"[alt]"
     ~title:(`Attribute "alt")
     ~size:`Regular
-    (* ~parse_title *)
     ~z_index:2
     ~transparent:false
 
