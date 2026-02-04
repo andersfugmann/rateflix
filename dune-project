@@ -23,3 +23,25 @@
  )
  (allow_empty)
 )
+
+(package
+ (name rateflix-server)
+ (version 0.1)
+ (license MIT)
+ (authors "Anders Fugmann")
+ (maintainers "<anders@fugmann.net>")
+ (synopsis "IMDB rating lookup server")
+ (description "HTTP service for fuzzy movie/title lookup against local IMDB data files.")
+ (depends
+   ocaml
+   cohttp-eio
+   eio
+   eio_main
+   uutf
+   uunf
+   uucp
+   yojson
+   ppx_deriving_yojson
+   cmdliner
+ )
+)
