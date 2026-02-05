@@ -1,0 +1,17 @@
+(executable
+ (name main)
+ (public_name rateflix-server)
+ (package rateflix-server)
+ (libraries
+   cohttp-eio
+   eio
+   eio_main
+   uutf
+   uunf
+   uucp
+   yojson
+   cmdliner
+   camlzip
+   base
+ )
+ (preprocess (pps ppx_deriving_yojson)))

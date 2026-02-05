@@ -30,15 +30,17 @@ run-server: server ## Run the server (requires --data-dir argument)
 run-server:
 	@$(SERVER_BIN) $(ARGS)
 
-DATA_FILES=$(DATA_DIR)/title.basics.tsv.gz $(DATA_DIR)/title.ratings.tsv.gz
+DATA_FILES=$(DATA_DIR)/title.basics.tsv $(DATA_DIR)/title.ratings.tsv
 
-$(DATA_DIR)/title.basics.tsv.gz:
+.delete_on_error: $(DATA_DIR)/title.basics.tsv
+$(DATA_DIR)/title.basics.tsv:
 	@mkdir -p $(DATA_DIR)
-	@curl -# -o $(DATA_DIR)/title.basics.tsv.gz $(IMDB_BASE_URL)/title.basics.tsv.gz
+	@curl -o - $(IMDB_BASE_URL)/title.basics.tsv.gz | gunzip > $@
 
-$(DATA_DIR)/title.ratings.tsv.gz:
+.delete_on_error: $(DATA_DIR)/title.ratings.tsv
+$(DATA_DIR)/title.ratings.tsv:
 	@mkdir -p $(DATA_DIR)
-	@curl -# -o $(DATA_DIR)/title.ratings.tsv.gz $(IMDB_BASE_URL)/title.ratings.tsv.gz
+	@curl -o - $(IMDB_BASE_URL)/title.ratings.tsv.gz | gunzip > $@
 
 .PHONY: run
 run: server $(DATA_FILES) ## Run the server with default data directory
