@@ -43,5 +43,8 @@
    yojson
    ppx_deriving_yojson
    cmdliner
+   spelll
+   (ppx_expect :with-test)
+   (ppx_inline_test :with-test)
  )
 )

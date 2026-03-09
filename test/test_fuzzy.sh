@@ -20,9 +20,9 @@ query() {
 
     if [ -n "$title_types" ]; then
         if [ -n "$year" ]; then
-            local payload="[{\"title\": \"$title\", \"year\": $year, \"title_types\": $title_types}]"
+            local payload="[{\"title\": \"$title\", \"year\": $year, \"title_types\": [$title_types]}]"
         else
-            local payload="[{\"title\": \"$title\", \"title_types\": $title_types}]"
+            local payload="[{\"title\": \"$title\", \"title_types\": [$title_types]}]"
         fi
     elif [ -n "$year" ]; then
         local payload="[{\"title\": \"$title\", \"year\": $year}]"
@@ -40,17 +40,19 @@ query() {
     local match_score
     match_score=$(echo "$response" | jq -r '.[0][1].match_score')
     local result_type
-    result_type=$(echo "$response" | jq -r '.[0][1].title_type')
+    result_type=$(echo "$response" | jq -r '.[0][1].title_type.[0]')
+    local result_year
+    result_year=$(echo "$response" | jq -r '.[0][1].year // "unknown"')
 
     if [ "$imdb_id" = "$expected_id" ]; then
         echo -e "${GREEN}✓${NC} $desc"
-        echo "  Query: '$title' → $imdb_id (score: $match_score, type: $result_type)"
+        echo "  Query: '$title' → $imdb_id (year: $result_year, score: $match_score, type: $result_type)"
         ((PASSED++))
     else
         echo -e "${RED}✗${NC} $desc"
         echo "  Query: '$title'"
-        echo "  Expected: $expected_id, Got: $imdb_id (score: $match_score, type: $result_type)"
-        echo "$response" | jq
+        echo "  Expected: $expected_id, Got: $imdb_id (year: $result_year, score: $match_score, type: $result_type)"
+        echo "$response" | jq || echo $response
         ((FAILED++))
     fi
 }
@@ -119,12 +121,13 @@ query "Breaking Bad" "" "tt0903747" "TV series without filter" '["tvSeries"]'
 query "Breaking Bad" "" "tt0903747" "TV series explicit filter" '["tvSeries"]'
 query "Fargo" 1996 "tt0116282" "Fargo movie (1996)" '["movie"]'
 query "Fargo" "" "tt2802850" "Fargo TV series" '["tvSeries"]'
-query "Dune" 2021 "tt1160419" "Dune movie with type filter" '["movie"]'
+query "Dune: Part One" 2021 "tt1160419" "Dune movie with type filter" '["movie"]'
 query "A Star Is Born" 2018 "tt1517451" "A Star Is Born movie 2018" '["movie"]'
 query "The Office" "" "tt0386676" "The Office US series" '["tvSeries"]'
 query "Westworld" "" "tt0475784" "Westworld series vs movie" '["tvSeries"]'
 query "True Grit" 2010 "tt1403865" "True Grit movie remake" '["movie"]'
 query "True Grit" 1969 "tt0065126" "True Grit original movie" '["movie"]'
+query "The Fly" 1986 "tt0091064" "The Fly movie" '["movie"]'
 
 # Summary
 echo ""

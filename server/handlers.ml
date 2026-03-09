@@ -12,7 +12,7 @@ let lookup_one state (query : Types.query) : Types.search_result =
         year = query.year;
         imdb_rating = 0.0;
         imdb_id = "";
-        title_type = "";
+        title_type = Types.Unknown;
         match_score = 0.0 }
   | Some (entry, score) ->
       { Types.title = entry.Imdb_data.primary_title;

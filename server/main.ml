@@ -4,12 +4,12 @@
 let load_data ~fs ~data_dir =
   let titles =
     let filter = function
-      | { Imdb_data.title_type = ("short" | "videoGame" | "tvSeries"); _ } -> false
+      | { Imdb_data.title_type = Types.(Short | VideoGame | TvEpisode); _ } -> false
       | _ -> true
     in
     Imdb_data.read ~filter Eio.Path.(fs / data_dir)
   in
-  let index = Fuzzy_match.build ~normalize:Normalize.normalize titles in
+  let index = Fuzzy_match.build ~normalize:Normalize_lib.Normalize.normalize ~tokenize:Normalize_lib.Normalize.tokenize titles in
   { Handlers.index }
 
 (** Reload data on separate domain to avoid blocking requests *)

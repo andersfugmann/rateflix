@@ -1,8 +1,17 @@
+(library
+ (name normalize_lib)
+ (modules normalize)
+ (libraries uutf uunf uucp)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
 (executable
  (name main)
  (public_name rateflix-server)
  (package rateflix-server)
+ (modules :standard \ normalize)
  (libraries
+   normalize_lib
    cohttp-eio
    eio
    eio_main
@@ -13,5 +22,6 @@
    cmdliner
    camlzip
    base
+   spelll
  )
  (preprocess (pps ppx_deriving_yojson)))

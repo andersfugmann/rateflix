@@ -15,14 +15,36 @@ let lookup ~queue (request : Types.request) : Types.response =
   |> List.map (fun (query, promise) ->
        (query, Eio.Promise.await promise))
 
+(** Format client address *)
+let client_addr conn =
+  let ((_sw, peer_addr), _conn_id) = conn in
+  Format.asprintf "%a" Eio.Net.Sockaddr.pp peer_addr
+
+(** Log a response line for each query/result pair *)
+let log_response addr (response : (Types.query * Types.search_result) list) =
+  List.iter (fun ((query : Types.query), (result : Types.search_result)) ->
+    let year_str = match query.year with
+      | Some y -> Printf.sprintf " (%d)" y
+      | None -> ""
+    in
+    let result_year_str = match result.year with
+      | Some y -> Printf.sprintf " (%d)" y
+      | None -> ""
+    in
+    Printf.printf "[%s] \"%s\"%s -> \"%s\"%s %.2f\n%!"
+      addr query.title year_str result.title result_year_str result.match_score
+  ) response
+
 (** Handle a single HTTP request *)
-let handle_request ~queue body =
+let handle_request ~queue ~addr body =
   body
   |> Yojson.Safe.from_string
   |> Types.request_of_yojson
   |> function
      | Ok request ->
-         lookup ~queue request
+         let response = lookup ~queue request in
+         log_response addr response;
+         response
          |> Types.response_to_yojson
          |> Yojson.Safe.to_string
          |> Option.some
@@ -30,13 +52,14 @@ let handle_request ~queue body =
 
 (** Create the callback function *)
 let make_callback ~queue =
-  fun _conn request body ->
+  fun conn request body ->
     let meth = Http.Request.meth request in
     let path = Http.Request.resource request in
+    let addr = client_addr conn in
     match meth, path with
     | `POST, "/lookup" ->
         let body_str = Eio.Buf_read.(of_flow ~max_size:10_000_000 body |> take_all) in
-        (match handle_request ~queue body_str with
+        (match handle_request ~queue ~addr body_str with
          | Some response_body ->
              let headers = Http.Header.of_list [("Content-Type", "application/json")] in
              Cohttp_eio.Server.respond ~headers ~status:`OK ~body:(Cohttp_eio.Body.of_string response_body) ()
