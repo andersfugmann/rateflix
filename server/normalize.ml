@@ -90,40 +90,34 @@ let substitution_cost a b =
   | a,b when is_case_equivalent a b -> 0.1
   | _ -> 1.0
 
-(** Weighted Levenshtein distance where case substitutions cost 0.1.
-    Uses two-row approach: fold over chars of s1, building each row functionally.
+(** Weighted Levenshtein distance using two mutable arrays.
     If ~max_edits is provided, returns infinity when distance is known to exceed it. *)
 let edit_distance ~cost ?max_edits s1 s2 =
   let a = to_uchars s1 in
   let b = to_uchars s2 in
+  let m = Array.length a in
   let n = Array.length b in
-  let init_row = Array.init (n + 1) Float.of_int in
+  let prev = Array.init (n + 1) Float.of_int in
+  let curr = Array.make (n + 1) 0.0 in
   let exceeds_max row = match max_edits with
     | None -> false
     | Some max -> Array.for_all (fun v -> v > max) row
   in
-  let next_row prev_row a_char =
-    let _, rev_cells =
-      Array.fold_left (fun (j, acc) b_char ->
-        let prev_above = prev_row.(j + 1) in
-        let prev_diag = prev_row.(j) in
-        let prev_left = List.hd acc in
-        let sub_cost = cost a_char b_char in
-        let cell = Float.min (Float.min (prev_above +. 1.0) (prev_left +. 1.0)) (prev_diag +. sub_cost) in
-        (j + 1, cell :: acc)
-      ) (0, [prev_row.(0) +. 1.0]) b
-    in
-    assert (n = List.length rev_cells - 1);
-    Array.of_list (List.rev rev_cells)
-  in
-  let rec process row = function
-    | [] -> row.(n)
-    | a_char :: rest ->
-      let row = next_row row a_char in
-      if exceeds_max row then infinity
-      else process row rest
-  in
-  process init_row (Array.to_list a)
+  let exception Early_exit in
+  try
+    for i = 0 to m - 1 do
+      curr.(0) <- Float.of_int (i + 1);
+      for j = 0 to n - 1 do
+        let sub_cost = cost a.(i) b.(j) in
+        curr.(j + 1) <- Float.min
+          (Float.min (prev.(j + 1) +. 1.0) (curr.(j) +. 1.0))
+          (prev.(j) +. sub_cost)
+      done;
+      if exceeds_max curr then raise Early_exit;
+      Array.blit curr 0 prev 0 (n + 1)
+    done;
+    prev.(n)
+  with Early_exit -> infinity
 
 let weighted_edit_distance ?max_edits s1 s2 =
   edit_distance ~cost:substitution_cost ?max_edits s1 s2
