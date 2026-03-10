@@ -55,8 +55,8 @@ let parse_title =
     let index =
       List.fold_left ~init:None ~f:(fun acc re ->
           match acc, Regexp.search re title 0 with
-          | Some n, Some (m, result) when Regexp.matched_string result != "" && m < n -> Some m
-          | None, Some (m, result) when Regexp.matched_string result != "" -> Some m
+          | Some n, Some (m, result) when Regexp.matched_string result <> "" && m < n -> Some m
+          | None, Some (m, result) when Regexp.matched_string result <> "" -> Some m
           | _ -> acc
         ) title_postfixes
     in
