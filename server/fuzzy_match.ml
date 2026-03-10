@@ -123,14 +123,14 @@ let search t ~query ~year ~title_types =
   | 0 -> None
   | _ ->
       lookup t ~query_tokens
-      |> List.map ~f:(fun idx -> t.titles.(idx))
-      |> List.filter ~f:(fun { entry; _ } -> matches_title_types ~title_types entry)
-      |> List.map ~f:(fun { entry; tokens; token_count;
-                          normalized_primary; normalized_secondary } ->
-          let matches = count_matches ~query_tokens ~title_tokens:tokens in
-          (entry, matches, token_count, normalized_primary, normalized_secondary)
-        )
-      |> List.filter ~f:(fun (_, matches, _, _, _) -> matches > 0)
+      |> List.filter_map ~f:(fun idx ->
+          let { entry; tokens; token_count;
+                normalized_primary; normalized_secondary } = t.titles.(idx) in
+          if not (matches_title_types ~title_types entry) then None
+          else
+            let matches = count_matches ~query_tokens ~title_tokens:tokens in
+            if matches = 0 then None
+            else Some (entry, matches, token_count, normalized_primary, normalized_secondary))
       |> List.sort ~compare:(fun (a_e, a_m, a_tc, _, _) (b_e, b_m, b_tc, _, _) ->
           compare_candidates ~query_year:year (a_e, a_m, a_tc) (b_e, b_m, b_tc))
       |> select_best ~norm_query ~query_year:year
