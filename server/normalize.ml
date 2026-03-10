@@ -83,19 +83,11 @@ let case_fold_uchar u =
 let is_case_equivalent a b =
   case_fold_uchar a = case_fold_uchar b
 
-(** Substitution cost: 0.0 for identical, 0.1 for case-only difference, 1.0 otherwise.
-    Fast path for ASCII avoids case_fold_uchar allocation. *)
+(** Substitution cost: 0.0 for identical, 0.1 for case-only difference, 1.0 otherwise *)
 let substitution_cost a b =
   if Uchar.equal a b then 0.0
-  else
-    let ai = Uchar.to_int a and bi = Uchar.to_int b in
-    if ai < 128 && bi < 128 then
-      (* ASCII fast path: check if same letter ignoring case *)
-      let la = if ai >= 65 && ai <= 90 then ai + 32 else ai in
-      let lb = if bi >= 65 && bi <= 90 then bi + 32 else bi in
-      if la = lb then 0.1 else 1.0
-    else if is_case_equivalent a b then 0.1
-    else 1.0
+  else if is_case_equivalent a b then 0.1
+  else 1.0
 
 (** Weighted Levenshtein distance using two mutable arrays.
     If ~max_edits is provided, returns infinity when distance is known to exceed it.
