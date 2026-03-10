@@ -214,16 +214,16 @@ let get_rating ?year title =
     match result with
     | Ok (Some rating) ->
       Log.log `Debug "Fetched rating from OMDb: %.1f: %s" rating title;
-      let* () = Storage.save_rating ~title ~rating:(Some rating) in
+      let* () = Storage.save_rating ~title ?year ~rating:(Some rating) () in
       Lwt.return (Some rating)
     | Ok None ->
       Log.log `Debug "No rating available for: %s" title;
       (* Cache the negative result too *)
-      let* () = Storage.save_rating ~title ~rating:None in
+      let* () = Storage.save_rating ~title ?year ~rating:None () in
       Lwt.return None
     | Error (err, `Retry) ->
         Log.log `Warn "Error fetching rating for %s: %s" title err;
-        let* () = Storage.save_rating ~title ~rating:None in
+        let* () = Storage.save_rating ~title ?year ~rating:None () in
         Lwt.return None
     | Error (err, `RateLimit) ->
       Log.log `Warn "Rate limit reached while fetching rating for %s: %s" title err;

@@ -60,8 +60,8 @@ let make_cache_key ?year title =
   in
   Printf.sprintf "%s%s:%s" cache_key_prefix normalized year
 
-let save_rating ~title ~rating =
-  let key = make_cache_key title in
+let save_rating ~title ?year ~rating () =
+  let key = make_cache_key ?year title in
   let entry = {
     rating;
     timestamp = gettimeofday ()
