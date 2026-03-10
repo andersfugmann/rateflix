@@ -22,6 +22,5 @@
    cmdliner
    camlzip
    base
-   spelll
  )
  (preprocess (pps ppx_deriving_yojson)))

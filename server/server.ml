@@ -22,7 +22,7 @@ let client_addr conn =
   Format.asprintf "%a" Eio.Net.Sockaddr.pp peer_addr
 
 (** Log a response line for each query/result pair *)
-let log_response addr elapsed_ms responses =
+let log_response addr responses =
   List.iter (fun ((query : Types.query), (result : Types.search_result), stats) ->
     let year_str = match query.year with
       | Some y -> Printf.sprintf " (%d)" y
@@ -34,12 +34,11 @@ let log_response addr elapsed_ms responses =
     in
     let stats_str = match stats with
       | Some (s : Fuzzy_match.search_stats) ->
-        Printf.sprintf " [candidates: %d, tied: %d, lookup: %.2f/%.2f/%.2fms, filter: %.2fms, sort: %.2fms, spelll: %.2fms, ours: %.2fms]"
-          s.candidates s.tied s.lookup_ms s.lookup_imp_ms s.lookup_ht_ms s.filter_ms s.sort_ms s.spelll_ms s.ours_ms
+        Printf.sprintf " [candidates: %d, tied: %d]" s.candidates s.tied
       | None -> " [no match]"
     in
-    Printf.printf "[%s] \"%s\"%s -> \"%s\"%s %.2f%s [%.1fms]\n%!"
-      addr query.title year_str result.title result_year_str result.match_score stats_str elapsed_ms
+    Printf.printf "[%s] \"%s\"%s -> \"%s\"%s %.2f%s\n%!"
+      addr query.title year_str result.title result_year_str result.match_score stats_str
   ) responses
 
 (** Handle a single HTTP request *)
@@ -49,10 +48,8 @@ let handle_request ~queue ~addr body =
   |> Types.request_of_yojson
   |> function
      | Ok request ->
-         let t0 = Unix.gettimeofday () in
          let results = lookup ~queue request in
-         let elapsed_ms = (Unix.gettimeofday () -. t0) *. 1000.0 in
-         log_response addr elapsed_ms results;
+         log_response addr results;
          let response = List.map (fun (q, r, _) -> (q, r)) results in
          response
          |> Types.response_to_yojson
