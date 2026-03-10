@@ -84,88 +84,71 @@ module Storage = struct
     else
       None
 
+  (** Helper: wrap a Chrome callback-based API call into an Lwt promise *)
+  let wrap_callback f =
+    let promise, resolver = Lwt.task () in
+    f (Lwt.wakeup_later resolver);
+    promise
+
   (** Set a string value in chrome.storage.local *)
   let set storage ~key ~value =
-    let result = Lwt_mvar.create_empty () in
     let obj = Js.Unsafe.obj [| (key, Js.Unsafe.inject (Js.string value)) |] in
-    storage##set
-      obj
-      (Js.wrap_callback (fun () ->
-         Lwt.ignore_result (Lwt_mvar.put result ())
-       ));
-    Lwt_mvar.take result
+    wrap_callback (fun resolve ->
+      storage##set obj (Js.wrap_callback (fun () -> resolve ())))
 
   (** Get a string value from chrome.storage.local *)
   let get storage key =
-    let result = Lwt_mvar.create_empty () in
-    let return v = Lwt.ignore_result (Lwt_mvar.put result v) in
-    storage##get
-      (Js.Unsafe.inject (Js.string key))
-      (Js.wrap_callback (fun result ->
-         try
-           let value = Js.Unsafe.get result key in
-           match Js.Optdef.to_option value with
-           | None -> return None
-           | Some js_value ->
-             let string_value = Js.to_string (Js.Unsafe.coerce js_value) in
-             return (Some string_value)
-         with _ ->
-           (** Maybe log an error here *)
-           return None
-       ));
-    Lwt_mvar.take result
+    wrap_callback (fun resolve ->
+      storage##get
+        (Js.Unsafe.inject (Js.string key))
+        (Js.wrap_callback (fun result ->
+           try
+             let value = Js.Unsafe.get result key in
+             match Js.Optdef.to_option value with
+             | None -> resolve None
+             | Some js_value ->
+               let string_value = Js.to_string (Js.Unsafe.coerce js_value) in
+               resolve (Some string_value)
+           with _ ->
+             resolve None)))
 
   (** Remove a key from chrome.storage.local *)
   let remove storage key =
-    let result = Lwt_mvar.create_empty () in
-    storage##remove
-      (Js.Unsafe.inject (Js.string key))
-      (Js.wrap_callback (fun () ->
-         Lwt.ignore_result (Lwt_mvar.put result ())
-       ));
-    Lwt_mvar.take result
+    wrap_callback (fun resolve ->
+      storage##remove
+        (Js.Unsafe.inject (Js.string key))
+        (Js.wrap_callback (fun () -> resolve ())))
 
   (** Clear all data from chrome.storage.local *)
   let clear storage =
-    let result = Lwt_mvar.create_empty () in
-    storage##clear
-      (Js.wrap_callback (fun () ->
-         Lwt.ignore_result (Lwt_mvar.put result ())
-       ));
-    Lwt_mvar.take result
+    wrap_callback (fun resolve ->
+      storage##clear (Js.wrap_callback (fun () -> resolve ())))
 
   let set_batch storage items =
-    let result = Lwt_mvar.create_empty () in
     let obj_items = Array.of_list
         (List.map ~f:(fun (k, v) -> (k, Js.Unsafe.inject (Js.string v))) items) in
     let obj = Js.Unsafe.obj obj_items in
-    storage##set
-      obj
-      (Js.wrap_callback (fun () ->
-         Lwt.ignore_result (Lwt_mvar.put result ())
-       ));
-    Lwt_mvar.take result
+    wrap_callback (fun resolve ->
+      storage##set obj (Js.wrap_callback (fun () -> resolve ())))
 
   (** Get all keys that match a prefix from chrome.storage.local *)
   let get_keys_by_prefix storage ~prefix =
-    let res = Lwt_mvar.create_empty () in
-    storage##get
-      (Js.Unsafe.inject Js.null)  (* null gets all items *)
-      (Js.wrap_callback (fun result ->
-         try
-           let keys = Js.object_keys result in
-           let len = keys##.length in
-           let prefix_len = String.length prefix in
-           List.init ~len ~f:(fun i -> Js.Unsafe.get keys i)
-           |> List.map ~f:(fun key -> Js.to_string (Js.Unsafe.coerce key))
-           |> List.filter ~f:(function
-             | key when String.length key >= prefix_len ->
-               String.sub key ~pos:0 ~len:prefix_len = prefix
-             | _ -> false)
-           |> (fun keys -> Lwt.ignore_result (Lwt_mvar.put res keys))
-         with _ ->
-           Lwt.ignore_result (Lwt_mvar.put res [])
-       ));
-    Lwt_mvar.take res
+    wrap_callback (fun resolve ->
+      storage##get
+        (Js.Unsafe.inject Js.null)
+        (Js.wrap_callback (fun result ->
+           try
+             let keys = Js.object_keys result in
+             let len = keys##.length in
+             let prefix_len = String.length prefix in
+             List.init ~len ~f:(fun i -> Js.Unsafe.get keys i)
+             |> List.map ~f:(fun key -> Js.to_string (Js.Unsafe.coerce key))
+             |> List.filter ~f:(function
+               | key when String.length key >= prefix_len ->
+                 String.sub key ~pos:0 ~len:prefix_len = prefix
+               | _ -> false)
+             |> resolve
+           with _ ->
+             resolve [])))
 
 end
