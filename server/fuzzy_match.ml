@@ -42,29 +42,9 @@ let build ~normalize ~tokenize titles =
   let inverted_index = Hashtbl.map lists ~f:(Set.of_list (module Int)) in
   { titles = indexed_titles; inverted_index; normalize; tokenize }
 
-(** Lookup using Set union of rarest n/2+1 query tokens *)
-let lookup t ~query_tokens =
-  let titles =
-    query_tokens
-    |> List.dedup_and_sort ~compare:String.compare
-    |> List.map ~f:(fun token ->
-        let count =
-          Hashtbl.find t.inverted_index token
-          |> Option.value_map ~f:Set.length ~default:0
-        in
-        token, count
-      )
-    |> List.sort ~compare:(fun (_, a) (_, b) -> Int.compare a b)
-    |> Fn.flip List.take ((List.length query_tokens + 1)/2)
-    |> List.map ~f:fst
-    |> List.filter_map ~f:(fun token -> Hashtbl.find t.inverted_index token)
-    |> Set.union_list (module Int)
-    |> Set.to_list
-  in
-  List.length titles, titles
 
 (** Lookup using imperative Bytes counting *)
-let _lookup_imperative t ~query_tokens =
+let lookup_imperative t ~query_tokens =
   let query_tokens = List.dedup_and_sort ~compare:String.compare query_tokens in
   let counts = Bytes.make (Array.length t.titles) '\000' in
   let touched = ref [] in
@@ -90,6 +70,29 @@ let _lookup_imperative t ~query_tokens =
       | c when c = !best -> tied := idx :: !tied
       | _ -> ());
   (total, !tied)
+
+(** Lookup using Set union of rarest n/2 query tokens *)
+let lookup t ~query_tokens =
+  let titles =
+    query_tokens
+    |> List.dedup_and_sort ~compare:String.compare
+    |> List.map ~f:(fun token ->
+        let count =
+          Hashtbl.find t.inverted_index token
+          |> Option.value_map ~f:Set.length ~default:0
+        in
+        token, count
+      )
+    |> List.sort ~compare:(fun (_, a) (_, b) -> Int.compare a b)
+    |> Fn.flip List.take ((List.length query_tokens + 1)/2)
+    |> List.map ~f:fst
+    |> List.filter_map ~f:(fun token -> Hashtbl.find t.inverted_index token)
+    |> Set.union_list (module Int)
+  in
+  match Set.length titles with
+  | n when n > 1000 -> lookup_imperative t ~query_tokens
+  | length -> length, Set.to_list titles
+
 
 (** Lookup using hashtable counting *)
 let _lookup_hashtbl t ~query_tokens =
@@ -143,7 +146,7 @@ let select_best ~query_uchars ~query_year candidates =
   | _ ->
       let best =
         List.fold_left candidates ~init:None ~f:(fun acc (entry, uchars_primary, uchars_secondary) ->
-          let max_edits = Option.map acc ~f:(fun (_, d, _) -> d) in
+          let max_edits = Option.map acc ~f:(fun (_, d, _, _) -> d) in
           let dist_primary = Normalize.weighted_edit_distance_uchars ?max_edits query_uchars uchars_primary in
           let dist_secondary = Normalize.weighted_edit_distance_uchars ?max_edits query_uchars uchars_secondary in
           let dist = Float.min dist_primary dist_secondary in
@@ -151,14 +154,20 @@ let select_best ~query_uchars ~query_year candidates =
             | Some qy -> Option.value_map entry.Imdb_data.year ~default:false ~f:(fun y -> y = qy)
             | None -> false
           in
+          let entry_year = Option.value entry.Imdb_data.year ~default:0 in
           match acc with
-          | Some (_, best_dist, _) when Float.( < ) dist best_dist -> Some (entry, dist, year_match)
-          | Some (_, best_dist, best_year) when Float.equal dist best_dist && (not best_year) && year_match -> Some (entry, dist, year_match)
+          | Some (_, best_dist, _, _) when Float.( < ) dist best_dist ->
+            Some (entry, dist, year_match, entry_year)
+          | Some (_, best_dist, best_year, _) when Float.equal dist best_dist && (not best_year) && year_match ->
+            Some (entry, dist, year_match, entry_year)
+          | Some (_, best_dist, best_year, best_entry_year)
+            when Float.equal dist best_dist && Bool.equal year_match best_year && entry_year > best_entry_year ->
+            Some (entry, dist, year_match, entry_year)
           | Some _ -> acc
-          | None -> Some (entry, dist, year_match))
+          | None -> Some (entry, dist, year_match, entry_year))
       in
       let stats = { candidates = num_candidates; tied = num_candidates } in
-      Option.map best ~f:(fun (entry, _dist, _) -> (entry, stats))
+      Option.map best ~f:(fun (entry, _dist, _, _) -> (entry, stats))
 
 (** Search for best matching title *)
 let search t ~query ~year ~title_types =
