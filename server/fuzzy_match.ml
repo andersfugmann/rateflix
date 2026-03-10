@@ -14,7 +14,7 @@ type indexed_title = {
 
 type t = {
   titles: indexed_title array;
-  inverted_index: (string, int array) Hashtbl.t;
+  inverted_index: (string, Set.M(Int).t) Hashtbl.t;
   normalize: string -> string;
   tokenize: string -> string list;
 }
@@ -39,7 +39,7 @@ let build ~normalize ~tokenize titles =
           Hashtbl.add_multi lists ~key:token ~data:idx
         )
     );
-  let inverted_index = Hashtbl.map lists ~f:Array.of_list in
+  let inverted_index = Hashtbl.map lists ~f:(Set.of_list (module Int)) in
   { titles = indexed_titles; inverted_index; normalize; tokenize }
 
 (** Lookup using Set union of rarest n/2+1 query tokens *)
@@ -50,7 +50,7 @@ let lookup t ~query_tokens =
     |> List.map ~f:(fun token ->
         let count =
           Hashtbl.find t.inverted_index token
-          |> Option.value_map ~f:Array.length ~default:0
+          |> Option.value_map ~f:Set.length ~default:0
         in
         token, count
       )
@@ -58,7 +58,6 @@ let lookup t ~query_tokens =
     |> Fn.flip List.take ((List.length query_tokens + 1)/2)
     |> List.map ~f:fst
     |> List.filter_map ~f:(fun token -> Hashtbl.find t.inverted_index token)
-    |> List.map ~f:(Set.of_array (module Int))
     |> Set.union_list (module Int)
     |> Set.to_list
   in
@@ -72,8 +71,8 @@ let _lookup_imperative t ~query_tokens =
   List.iter query_tokens ~f:(fun token ->
       match Hashtbl.find t.inverted_index token with
       | None -> ()
-      | Some arr ->
-        Array.iter arr ~f:(fun idx ->
+      | Some set ->
+        Set.iter set ~f:(fun idx ->
             let prev = Char.to_int (Bytes.get counts idx) in
             (match prev with
              | 0 -> touched := idx :: !touched
@@ -99,8 +98,8 @@ let _lookup_hashtbl t ~query_tokens =
   List.iter query_tokens ~f:(fun token ->
       match Hashtbl.find t.inverted_index token with
       | None -> ()
-      | Some arr ->
-        Array.iter arr ~f:(fun idx ->
+      | Some set ->
+        Set.iter set ~f:(fun idx ->
             Hashtbl.update counts idx ~f:(function
               | None -> 1
               | Some n -> n + 1))
