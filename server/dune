@@ -1,7 +1,6 @@
 (library
  (name normalize)
  (modules normalize)
- (wrapped false)
  (libraries uutf uunf uucp)
  (inline_tests)
  (preprocess (pps ppx_expect)))

@@ -34,7 +34,8 @@ let log_response addr elapsed_ms responses =
     in
     let stats_str = match stats with
       | Some (s : Fuzzy_match.search_stats) ->
-        Printf.sprintf " [candidates: %d, tied: %d]" s.candidates s.tied
+        Printf.sprintf " [candidates: %d, tied: %d, lookup: %.2f/%.2f/%.2fms, filter: %.2fms, sort: %.2fms, spelll: %.2fms, ours: %.2fms]"
+          s.candidates s.tied s.lookup_ms s.lookup_imp_ms s.lookup_ht_ms s.filter_ms s.sort_ms s.spelll_ms s.ours_ms
       | None -> " [no match]"
     in
     Printf.printf "[%s] \"%s\"%s -> \"%s\"%s %.2f%s [%.1fms]\n%!"

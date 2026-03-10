@@ -101,6 +101,7 @@ let _lookup3 t ~query_tokens =
 let lookup t ~query_tokens =
   let titles =
     query_tokens
+    |> List.dedup_and_sort ~compare:String.compare
     |> List.map ~f:(fun token ->
         let count =
           Hashtbl.find t.inverted_index token
@@ -109,7 +110,7 @@ let lookup t ~query_tokens =
         token, count
       )
     |> List.sort ~compare:(fun (_, a) (_, b) -> Int.compare a b)
-    |> Fn.flip List.take ((List.length query_tokens)/2+1)
+    |> Fn.flip List.take ((List.length query_tokens + 1)/2)
     |> List.map ~f:fst
     |> List.filter_map ~f:(fun token -> Hashtbl.find t.inverted_index token)
     |> List.map ~f:(Set.of_array (module Int))
@@ -119,6 +120,7 @@ let lookup t ~query_tokens =
   List.length titles, titles
 
 let lookup_imperative t ~query_tokens =
+  let query_tokens = List.dedup_and_sort ~compare:String.compare query_tokens in
   let counts = Bytes.make (Array.length t.titles) '\000' in
   let touched = ref [] in
   List.iter query_tokens ~f:(fun token ->
@@ -143,6 +145,7 @@ let lookup_imperative t ~query_tokens =
   (total, !tied)
 
 let lookup_hashtbl t ~query_tokens =
+  let query_tokens = List.dedup_and_sort ~compare:String.compare query_tokens in
   let counts = Hashtbl.create ~size:1000 (module Int) in
   List.iter query_tokens ~f:(fun token ->
       match Hashtbl.find t.inverted_index token with

@@ -26,8 +26,8 @@ server-release:
 	@dune build --profile=release server/main.exe
 
 .PHONY: run-server
-run-server: server ## Run the server with default data directory
-run-server:
+run-server: ## Run the server with default data directory
+run-server: server
 	@$(SERVER_BIN) --data-dir $(DATA_DIR) $(ARGS)
 
 DATA_FILES=$(DATA_DIR)/title.basics.tsv $(DATA_DIR)/title.ratings.tsv
