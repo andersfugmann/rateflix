@@ -1,6 +1,8 @@
 (** Token-based matching using inverted index, with edit distance scoring *)
 open Base
 
+module Normalize = Normalize_lib.Normalize
+
 (** Indexed title with precomputed tokens and normalized strings *)
 type indexed_title = {
   entry: Imdb_data.title_entry;
@@ -8,6 +10,8 @@ type indexed_title = {
   token_count: int;
   normalized_primary: string;
   normalized_secondary: string;
+  uchars_primary: Uchar.t array;
+  uchars_secondary: Uchar.t array;
 }
 
 type t = {
@@ -25,10 +29,11 @@ let build ~normalize ~tokenize titles =
       let norm2 = normalize entry.Imdb_data.secondary_title in
       let tokens1 = tokenize norm1 in
       let tokens2 = tokenize norm2 in
-      (* Combine tokens from both titles, deduplicated *)
       let tokens = List.dedup_and_sort ~compare:String.compare (tokens1 @ tokens2) in
       { entry; tokens; token_count = List.length tokens1;
-        normalized_primary = norm1; normalized_secondary = norm2 }
+        normalized_primary = norm1; normalized_secondary = norm2;
+        uchars_primary = Normalize.to_uchars norm1;
+        uchars_secondary = Normalize.to_uchars norm2 }
     )
   in
   Array.iteri indexed_titles ~f:(fun idx { tokens; _ } ->
@@ -89,9 +94,6 @@ let matches_title_types ~title_types entry =
   | None -> true
   | Some types -> List.mem ~equal:Poly.equal types entry.Imdb_data.title_type
 
-
-module Normalize = Normalize_lib.Normalize
-
 (** Calculate normalized score: 1.0 = perfect match, 0.0 = completely different.
     Case differences cost 0.1 per char, other edits cost 1.0. *)
 let calculate_score ~query ~title =
@@ -108,16 +110,16 @@ type search_stats = {
 
 (** Select best candidate by edit distance, with year preference.
     All candidates already have the maximum token match count. *)
-let select_best ~norm_query ~query_year candidates =
+let select_best ~query_uchars ~query_year candidates =
   let num_candidates = List.length candidates in
   match candidates with
   | [] -> None
   | _ ->
       let best =
-        List.fold_left candidates ~init:None ~f:(fun acc (entry, norm_primary, norm_secondary) ->
+        List.fold_left candidates ~init:None ~f:(fun acc (entry, uchars_primary, uchars_secondary) ->
           let max_edits = Option.map acc ~f:(fun (_, d, _) -> d) in
-          let dist_primary = Normalize.weighted_edit_distance ?max_edits norm_query norm_primary in
-          let dist_secondary = Normalize.weighted_edit_distance ?max_edits norm_query norm_secondary in
+          let dist_primary = Normalize.weighted_edit_distance_uchars ?max_edits query_uchars uchars_primary in
+          let dist_secondary = Normalize.weighted_edit_distance_uchars ?max_edits query_uchars uchars_secondary in
           let dist = Float.min dist_primary dist_secondary in
           let year_match = match query_year with
             | Some qy -> Option.value_map entry.Imdb_data.year ~default:false ~f:(fun y -> y = qy)
@@ -135,6 +137,7 @@ let select_best ~norm_query ~query_year candidates =
 (** Search for best matching title *)
 let search t ~query ~year ~title_types =
   let norm_query = t.normalize query in
+  let query_uchars = Normalize.to_uchars norm_query in
   let query_tokens = t.tokenize norm_query in
   match List.length query_tokens with
   | 0 -> None
@@ -143,13 +146,16 @@ let search t ~query ~year ~title_types =
       lookup t ~query_tokens
       |> List.filter_map ~f:(fun (idx, _matches) ->
           let { entry; tokens = _; token_count = _;
-                normalized_primary; normalized_secondary } = t.titles.(idx) in
+                normalized_primary; normalized_secondary;
+                uchars_primary; uchars_secondary } = t.titles.(idx) in
           if not (matches_title_types ~title_types entry) then None
-          else Some (entry, normalized_primary, normalized_secondary))
-      |> List.sort ~compare:(fun (_, p1, s1) (_, p2, s2) ->
+          else Some (entry, normalized_primary, normalized_secondary,
+                     uchars_primary, uchars_secondary))
+      |> List.sort ~compare:(fun (_, p1, s1, _, _) (_, p2, s2, _, _) ->
           let len a b = Int.abs (String.length a - query_len) |> Int.min (Int.abs (String.length b - query_len)) in
           Int.compare (len p1 s1) (len p2 s2))
-      |> select_best ~norm_query ~query_year:year
+      |> List.map ~f:(fun (entry, _, _, up, us) -> (entry, up, us))
+      |> select_best ~query_uchars ~query_year:year
       |> Option.map ~f:(fun (entry, stats) ->
           let score = calculate_score ~query ~title:entry.Imdb_data.primary_title in
           (entry, score, stats))

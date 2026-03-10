@@ -83,42 +83,72 @@ let case_fold_uchar u =
 let is_case_equivalent a b =
   case_fold_uchar a = case_fold_uchar b
 
-(** Substitution cost: 0.0 for identical, 0.1 for case-only difference, 1.0 otherwise *)
+(** Substitution cost: 0.0 for identical, 0.1 for case-only difference, 1.0 otherwise.
+    Fast path for ASCII avoids case_fold_uchar allocation. *)
 let substitution_cost a b =
-  match a,b with
-  | a,b when Uchar.equal a b -> 0.0
-  | a,b when is_case_equivalent a b -> 0.1
-  | _ -> 1.0
+  if Uchar.equal a b then 0.0
+  else
+    let ai = Uchar.to_int a and bi = Uchar.to_int b in
+    if ai < 128 && bi < 128 then
+      (* ASCII fast path: check if same letter ignoring case *)
+      let la = if ai >= 65 && ai <= 90 then ai + 32 else ai in
+      let lb = if bi >= 65 && bi <= 90 then bi + 32 else bi in
+      if la = lb then 0.1 else 1.0
+    else if is_case_equivalent a b then 0.1
+    else 1.0
 
-(** Weighted Levenshtein distance using two mutable arrays.
-    If ~max_edits is provided, returns infinity when distance is known to exceed it. *)
-let edit_distance ~cost ?max_edits s1 s2 =
-  let a = to_uchars s1 in
-  let b = to_uchars s2 in
+(** Weighted Levenshtein distance using two mutable arrays with diagonal band
+    optimization. If ~max_edits is provided, returns infinity when distance
+    is known to exceed it. Accepts pre-decoded uchar arrays to avoid repeated
+    UTF-8 decoding. *)
+let edit_distance_uchars ~cost ?max_edits a b =
   let m = Array.length a in
   let n = Array.length b in
-  let prev = Array.init (n + 1) Float.of_int in
-  let curr = Array.make (n + 1) 0.0 in
-  let exceeds_max row = match max_edits with
-    | None -> false
-    | Some max -> Array.for_all (fun v -> v > max) row
-  in
-  let exception Early_exit in
-  try
-    for i = 0 to m - 1 do
-      curr.(0) <- Float.of_int (i + 1);
-      for j = 0 to n - 1 do
-        let sub_cost = cost a.(i) b.(j) in
-        curr.(j + 1) <- Float.min
-          (Float.min (prev.(j + 1) +. 1.0) (curr.(j) +. 1.0))
-          (prev.(j) +. sub_cost)
+  (* Length-difference lower bound: if lengths differ by more than max_edits,
+     the edit distance must exceed it *)
+  match max_edits with
+  | Some max when Float.of_int (abs (m - n)) > max -> infinity
+  | _ ->
+    let prev = Array.init (n + 1) Float.of_int in
+    let curr = Array.make (n + 1) 0.0 in
+    (* With max_edits, only compute a diagonal band of width 2*k+1 *)
+    let k = match max_edits with
+      | Some max -> int_of_float (Float.round max)
+      | None -> max m n
+    in
+    let exception Early_exit in
+    try
+      for i = 0 to m - 1 do
+        let j_min = max 0 (i - k) in
+        let j_max = min (n - 1) (i + k) in
+        (* Initialize cells outside band to infinity *)
+        curr.(0) <- if j_min = 0 then Float.of_int (i + 1) else infinity;
+        let row_min = ref (if j_min = 0 then curr.(0) else infinity) in
+        for j = j_min to j_max do
+          let left = if j > j_min || j = 0 then curr.(j) +. 1.0 else infinity in
+          let above = if j < j_max || j + 1 <= n then prev.(j + 1) +. 1.0 else infinity in
+          let sub_cost = cost a.(i) b.(j) in
+          let v = Float.min (Float.min above left) (prev.(j) +. sub_cost) in
+          curr.(j + 1) <- v;
+          if v < !row_min then row_min := v
+        done;
+        (match max_edits with
+         | Some max when !row_min > max -> raise Early_exit
+         | _ -> ());
+        Array.blit curr 0 prev 0 (n + 1)
       done;
-      if exceeds_max curr then raise Early_exit;
-      Array.blit curr 0 prev 0 (n + 1)
-    done;
-    prev.(n)
-  with Early_exit -> infinity
+      prev.(n)
+    with Early_exit -> infinity
 
+(** Edit distance from strings (decodes UTF-8 internally) *)
+let edit_distance ~cost ?max_edits s1 s2 =
+  edit_distance_uchars ~cost ?max_edits (to_uchars s1) (to_uchars s2)
+
+(** Weighted edit distance from pre-decoded uchar arrays *)
+let weighted_edit_distance_uchars ?max_edits a b =
+  edit_distance_uchars ~cost:substitution_cost ?max_edits a b
+
+(** Weighted edit distance from strings *)
 let weighted_edit_distance ?max_edits s1 s2 =
   edit_distance ~cost:substitution_cost ?max_edits s1 s2
 
