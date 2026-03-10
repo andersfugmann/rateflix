@@ -97,38 +97,27 @@ let substitution_cost a b =
     else if is_case_equivalent a b then 0.1
     else 1.0
 
-(** Weighted Levenshtein distance using two mutable arrays with diagonal band
-    optimization. If ~max_edits is provided, returns infinity when distance
-    is known to exceed it. Accepts pre-decoded uchar arrays to avoid repeated
-    UTF-8 decoding. *)
+(** Weighted Levenshtein distance using two mutable arrays.
+    If ~max_edits is provided, returns infinity when distance is known to exceed it.
+    Accepts pre-decoded uchar arrays to avoid repeated UTF-8 decoding. *)
 let edit_distance_uchars ~cost ?max_edits a b =
   let m = Array.length a in
   let n = Array.length b in
-  (* Length-difference lower bound: if lengths differ by more than max_edits,
-     the edit distance must exceed it *)
   match max_edits with
   | Some max when Float.of_int (abs (m - n)) > max -> infinity
   | _ ->
     let prev = Array.init (n + 1) Float.of_int in
     let curr = Array.make (n + 1) 0.0 in
-    (* With max_edits, only compute a diagonal band of width 2*k+1 *)
-    let k = match max_edits with
-      | Some max -> int_of_float (Float.round max)
-      | None -> max m n
-    in
     let exception Early_exit in
     try
       for i = 0 to m - 1 do
-        let j_min = max 0 (i - k) in
-        let j_max = min (n - 1) (i + k) in
-        (* Initialize cells outside band to infinity *)
-        curr.(0) <- if j_min = 0 then Float.of_int (i + 1) else infinity;
-        let row_min = ref (if j_min = 0 then curr.(0) else infinity) in
-        for j = j_min to j_max do
-          let left = if j > j_min || j = 0 then curr.(j) +. 1.0 else infinity in
-          let above = if j < j_max || j + 1 <= n then prev.(j + 1) +. 1.0 else infinity in
+        curr.(0) <- Float.of_int (i + 1);
+        let row_min = ref curr.(0) in
+        for j = 0 to n - 1 do
           let sub_cost = cost a.(i) b.(j) in
-          let v = Float.min (Float.min above left) (prev.(j) +. sub_cost) in
+          let v = Float.min
+            (Float.min (prev.(j + 1) +. 1.0) (curr.(j) +. 1.0))
+            (prev.(j) +. sub_cost) in
           curr.(j + 1) <- v;
           if v < !row_min then row_min := v
         done;
