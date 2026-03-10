@@ -273,96 +273,94 @@ let debug_l ?debug ~msg elts =
    filter: Filter based on which element. That must be the overall tree!
    parent: How many levels up from selector
 *)
-let process ?(parent=0) ?transparent ?rating_selector ?title_selector ?transparency_selector ?exclude ?(filter=(fun (_, _) -> true)) ?z_index ?border_radius ?(parse_title=(fun t -> t, None)) ~selector ~title ~size =
-  let get_selector = function
-    | None -> fun elt -> elt
-    | Some selector ->
-      let selector = Js.string selector in
-      fun elt -> elt##querySelector selector |> Js.Opt.to_option |> Option.value ~default:elt
-  in
-  let rating_selector = get_selector rating_selector in
-  let transparency_selector = get_selector transparency_selector in
+(** Resolve an optional CSS selector into a function that queries an element *)
+let resolve_selector = function
+  | None -> fun elt -> elt
+  | Some selector ->
+    let selector = Js.string selector in
+    fun elt -> elt##querySelector selector |> Js.Opt.to_option |> Option.value ~default:elt
 
-  let extract_title =
-    match title with
-    | `Attribute attr ->
-      let attr = Js.string attr in
-      fun elt ->
-        elt##getAttribute attr
-        |> Js.Opt.to_option
-        |> Option.map Js.to_string
-        |> Option.map String.trim
-        |> (function Some "" -> None | x -> x)
-    | `Function f -> fun elt ->
-      f elt
+(** Resolve a title_selector into a function returning candidate elements *)
+let resolve_title_selector = function
+  | None -> fun elt -> [ elt ]
+  | Some selector ->
+    let selector = Js.string selector in
+    fun elt ->
+      match elt##querySelectorAll selector |> Dom.list_of_nodeList with
+      | [] -> [ elt ]
+      | elts -> elts
+
+(** Build title extraction function from title spec *)
+let build_title_extractor = function
+  | `Attribute attr ->
+    let attr = Js.string attr in
+    fun elt ->
+      elt##getAttribute attr
+      |> Js.Opt.to_option
+      |> Option.map Js.to_string
       |> Option.map String.trim
       |> (function Some "" -> None | x -> x)
-  in
+  | `Function f -> fun elt ->
+    f elt
+    |> Option.map String.trim
+    |> (function Some "" -> None | x -> x)
 
-  (* Get all elements that matches, or current element if no title selector is set *)
-  let title_selector = match title_selector with
-    | None -> fun elt -> [ elt ]
-    | Some selector ->
-      let selector = Js.string selector in
-      fun elt ->
-        match elt##querySelectorAll selector |> Dom.list_of_nodeList with
-        | [] -> [ elt ]
-        | elts -> elts
-  in
-  let exclude =
-    let exclude_f = function
-      | `Function f -> fun elt -> f elt
-      | `Attribute (attr, values) ->
-        let attr = Js.string attr in
-        fun elt ->
-          elt##getAttribute attr
-          |> Js.Opt.to_option
-          |> Option.map (fun v -> Js.to_string v)
-          |> Option.map (fun v -> List.exists ~f:(String.equal v) values)
-          |> Option.value ~default:false
-      | `Exists xpath ->
-        let xpath = Js.string xpath in
-        fun elt ->
-          elt##querySelector xpath |> Js.Opt.test
-      | `Closest xpath ->
-        let xpath = Js.string xpath in
-        fun elt ->
-          elt##closest xpath |> Js.Opt.test
-      | `Page_title pattern ->
-        let pattern = Regexp.regexp pattern in
-        fun _ ->
-          let title = Dom_html.document##.title |> Js.to_string in
-          Regexp.string_match pattern title 0
-          |> Option.is_some
-    in
-    let excludes =
-      Option.value ~default:[] exclude
-      |> List.map ~f:exclude_f
-    in
-    fun elt -> List.exists ~f:(fun exclude -> exclude elt) excludes
-  in
-  let get_title elt =
-    title_selector elt
-    |> List.find_map ~f:(fun elt ->
-        extract_title elt
-        |> Option.map parse_title
-        |> Option.map (fun (title, year) -> String.trim title, year)
-        |> function
-        | Some (title, _) when String.length title = 0 -> None
-        | v -> v
-      )
-  in
+(** Build exclude predicate from a single exclude spec *)
+let build_exclude_predicate = function
+  | `Function f -> fun elt -> f elt
+  | `Attribute (attr, values) ->
+    let attr = Js.string attr in
+    fun elt ->
+      elt##getAttribute attr
+      |> Js.Opt.to_option
+      |> Option.map (fun v -> Js.to_string v)
+      |> Option.map (fun v -> List.exists ~f:(String.equal v) values)
+      |> Option.value ~default:false
+  | `Exists xpath ->
+    let xpath = Js.string xpath in
+    fun elt -> elt##querySelector xpath |> Js.Opt.test
+  | `Closest xpath ->
+    let xpath = Js.string xpath in
+    fun elt -> elt##closest xpath |> Js.Opt.test
+  | `Page_title pattern ->
+    let pattern = Regexp.regexp pattern in
+    fun _ ->
+      let title = Dom_html.document##.title |> Js.to_string in
+      Regexp.string_match pattern title 0
+      |> Option.is_some
 
+(** Combine a list of exclude specs into a single predicate *)
+let build_excludes specs =
+  let predicates = List.map ~f:build_exclude_predicate specs in
+  fun elt -> List.exists ~f:(fun p -> p elt) predicates
+
+(** Extract title from element using title_selector and title extractor *)
+let find_title ~title_selector ~extract_title ~parse_title elt =
+  title_selector elt
+  |> List.find_map ~f:(fun elt ->
+      extract_title elt
+      |> Option.map parse_title
+      |> Option.map (fun (title, year) -> String.trim title, year)
+      |> function
+      | Some (title, _) when String.length title = 0 -> None
+      | v -> v
+    )
+
+let process ?(parent=0) ?transparent ?rating_selector ?title_selector ?transparency_selector ?exclude ?(filter=(fun (_, _) -> true)) ?z_index ?border_radius ?(parse_title=(fun t -> t, None)) ~selector ~title ~size =
+  let rating_selector = resolve_selector rating_selector in
+  let transparency_selector = resolve_selector transparency_selector in
+  let extract_title = build_title_extractor title in
+  let title_selector = resolve_title_selector title_selector in
+  let exclude = build_excludes (Option.value ~default:[] exclude) in
+  let get_title = find_title ~title_selector ~extract_title ~parse_title in
   fun () ->
     Dom_html.document##querySelectorAll (Js.string selector)
     |> Dom.list_of_nodeList
     |> List.map ~f:(get_parent ~level:parent)
-    |> List.filter ~f:(fun elt -> exclude elt |> not)
-    |> List.filter ~f:(fun elt -> has_imdb_overlay elt |> not)
+    |> List.filter ~f:(fun elt -> not (exclude elt))
+    |> List.filter ~f:(fun elt -> not (has_imdb_overlay elt))
     |> List.filter_map ~f:(fun elt ->
-        get_title elt
-        |> Option.map (fun title -> elt, title)
-      )
+        get_title elt |> Option.map (fun title -> elt, title))
     |> List.filter ~f:filter
     |> List.map ~f:(fun (elt, title) -> (rating_selector elt, transparency_selector elt, title))
     |> Lwt_list.iter_p (fun (rating_elt, transparency_elt, (title, year)) ->
