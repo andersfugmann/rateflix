@@ -89,20 +89,6 @@ let matches_title_types ~title_types entry =
   | None -> true
   | Some types -> List.mem ~equal:Poly.equal types entry.Imdb_data.title_type
 
-(** Compare candidates: more token matches, then fewer tokens, then year match *)
-let compare_candidates ~query_year (a_entry, a_matches, a_token_count) (b_entry, b_matches, b_token_count) =
-  match Int.compare b_matches a_matches with
-  | 0 ->
-      (match Int.compare a_token_count b_token_count with
-       | 0 ->
-           (match query_year with
-            | None -> 0
-            | Some qy ->
-                let a_year = Option.value_map a_entry.Imdb_data.year ~default:false ~f:(fun y -> y = qy) in
-                let b_year = Option.value_map b_entry.Imdb_data.year ~default:false ~f:(fun y -> y = qy) in
-                Bool.compare b_year a_year)
-       | n -> n)
-  | n -> n
 
 module Normalize = Normalize_lib.Normalize
 
@@ -127,10 +113,8 @@ let select_best ~norm_query ~query_year candidates =
   match candidates with
   | [] -> None
   | _ ->
-      (* Among all candidates, pick the one with lowest weighted edit distance.
-         Track best distance so far to short-circuit via max_edits. *)
       let best =
-        List.fold_left candidates ~init:None ~f:(fun acc (entry, _, _, norm_primary, norm_secondary) ->
+        List.fold_left candidates ~init:None ~f:(fun acc (entry, norm_primary, norm_secondary) ->
           let max_edits = Option.map acc ~f:(fun (_, d, _) -> d) in
           let dist_primary = Normalize.weighted_edit_distance ?max_edits norm_query norm_primary in
           let dist_secondary = Normalize.weighted_edit_distance ?max_edits norm_query norm_secondary in
@@ -156,13 +140,11 @@ let search t ~query ~year ~title_types =
   | 0 -> None
   | _ ->
       lookup t ~query_tokens
-      |> List.filter_map ~f:(fun (idx, matches) ->
-          let { entry; tokens = _; token_count;
+      |> List.filter_map ~f:(fun (idx, _matches) ->
+          let { entry; tokens = _; token_count = _;
                 normalized_primary; normalized_secondary } = t.titles.(idx) in
           if not (matches_title_types ~title_types entry) then None
-          else Some (entry, matches, token_count, normalized_primary, normalized_secondary))
-      |> List.sort ~compare:(fun (a_e, a_m, a_tc, _, _) (b_e, b_m, b_tc, _, _) ->
-          compare_candidates ~query_year:year (a_e, a_m, a_tc) (b_e, b_m, b_tc))
+          else Some (entry, normalized_primary, normalized_secondary))
       |> select_best ~norm_query ~query_year:year
       |> Option.map ~f:(fun (entry, stats) ->
           let score = calculate_score ~query ~title:entry.Imdb_data.primary_title in
