@@ -22,6 +22,8 @@ type query_json = {
 type response_entry = query_json * search_result [@@deriving yojson]
 type response = response_entry list [@@deriving yojson]
 
+type request = query_json list [@@deriving yojson]
+
 [@@@warning "+39"]
 
 let server_url = "http://127.0.0.1:8080"
@@ -30,13 +32,8 @@ let server_url = "http://127.0.0.1:8080"
 let parse_rating rating = if Float.equal rating 0.0 then None else Some rating
 
 let fetch_imdb_rating ?year title : (float option, _) Lwt_result.t =
-  let query =
-    let base = Printf.sprintf {|{"title": "%s"|} title in
-    match year with
-    | Some y -> Printf.sprintf "%s, \"year\": %d}" base y
-    | None -> base ^ "}"
-  in
-  let payload = Printf.sprintf "[%s]" query in
+  let query = { q_title = title; q_year = year } in
+  let payload = request_to_yojson [query] |> Yojson.Safe.to_string in
   let url = Printf.sprintf "%s/lookup" server_url in
   let* frame =
     XmlHttpRequest.perform_raw
