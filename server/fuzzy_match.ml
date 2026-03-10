@@ -139,21 +139,15 @@ type search_stats = {
 
 (** Select best candidate by edit distance, with year preference.
     All candidates already have the maximum token match count.
-    Tiebreakers: edit distance < year match < title length closeness < most recent year *)
-let select_best ~query ~query_uchars ~query_year candidates =
-  let query_len = String.length query in
-  let title_len_diff entry =
-    Int.min
-      (Int.abs (String.length entry.Imdb_data.primary_title - query_len))
-      (Int.abs (String.length entry.Imdb_data.secondary_title - query_len))
-  in
+    Tiebreakers: edit distance < year match < most recent year *)
+let select_best ~query:_ ~query_uchars ~query_year candidates =
   let num_candidates = List.length candidates in
   match candidates with
   | [] -> None
   | _ ->
       let best =
         List.fold_left candidates ~init:None ~f:(fun acc (entry, uchars_primary, uchars_secondary) ->
-          let max_edits = Option.map acc ~f:(fun (_, d, _, _, _) -> d) in
+          let max_edits = Option.map acc ~f:(fun (_, d, _, _) -> d) in
           let dist_primary = Normalize.weighted_edit_distance_uchars ?max_edits query_uchars uchars_primary in
           let dist_secondary = Normalize.weighted_edit_distance_uchars ?max_edits query_uchars uchars_secondary in
           let dist = Float.min dist_primary dist_secondary in
@@ -161,26 +155,21 @@ let select_best ~query ~query_uchars ~query_year candidates =
             | Some qy -> Option.value_map entry.Imdb_data.year ~default:false ~f:(fun y -> y = qy)
             | None -> false
           in
-          let len_diff = title_len_diff entry in
           let entry_year = Option.value entry.Imdb_data.year ~default:0 in
           match acc with
-          | Some (_, best_dist, _, _, _) when Float.( < ) dist best_dist ->
-            Some (entry, dist, year_match, len_diff, entry_year)
-          | Some (_, best_dist, best_year, _, _)
+          | Some (_, best_dist, _, _) when Float.( < ) dist best_dist ->
+            Some (entry, dist, year_match, entry_year)
+          | Some (_, best_dist, best_year, _)
             when Float.equal dist best_dist && (not best_year) && year_match ->
-            Some (entry, dist, year_match, len_diff, entry_year)
-          | Some (_, best_dist, best_year, best_len_diff, _)
-            when Float.equal dist best_dist && Bool.equal year_match best_year && len_diff < best_len_diff ->
-            Some (entry, dist, year_match, len_diff, entry_year)
-          | Some (_, best_dist, best_year, best_len_diff, best_entry_year)
-            when Float.equal dist best_dist && Bool.equal year_match best_year
-                 && len_diff = best_len_diff && entry_year > best_entry_year ->
-            Some (entry, dist, year_match, len_diff, entry_year)
+            Some (entry, dist, year_match, entry_year)
+          | Some (_, best_dist, best_year, best_entry_year)
+            when Float.equal dist best_dist && Bool.equal year_match best_year && entry_year > best_entry_year ->
+            Some (entry, dist, year_match, entry_year)
           | Some _ -> acc
-          | None -> Some (entry, dist, year_match, len_diff, entry_year))
+          | None -> Some (entry, dist, year_match, entry_year))
       in
       let stats = { candidates = num_candidates; tied = num_candidates } in
-      Option.map best ~f:(fun (entry, _dist, _, _, _) -> (entry, stats))
+      Option.map best ~f:(fun (entry, _dist, _, _) -> (entry, stats))
 
 (** Search for best matching title *)
 let search t ~query ~year ~title_types =
