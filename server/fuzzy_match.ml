@@ -1,12 +1,13 @@
 (** Token-based matching using inverted index, with edit distance scoring *)
 open Base
 
-(** Indexed title with precomputed tokens and normalized string *)
+(** Indexed title with precomputed tokens and normalized strings *)
 type indexed_title = {
   entry: Imdb_data.title_entry;
   tokens: string list;
   token_count: int;
-  normalized: string;
+  normalized_primary: string;
+  normalized_secondary: string;
 }
 
 type t = {
@@ -26,7 +27,8 @@ let build ~normalize ~tokenize titles =
       let tokens2 = tokenize norm2 in
       (* Combine tokens from both titles, deduplicated *)
       let tokens = List.dedup_and_sort ~compare:String.compare (tokens1 @ tokens2) in
-      { entry; tokens; token_count = List.length tokens1; normalized = norm1 }
+      { entry; tokens; token_count = List.length tokens1;
+        normalized_primary = norm1; normalized_secondary = norm2 }
     )
   in
   Array.iteri indexed_titles ~f:(fun idx { tokens; _ } ->
@@ -88,14 +90,13 @@ let calculate_score ~query ~title =
 let select_best ~norm_query ~query_year candidates =
   match candidates with
   | [] -> None
-  | (first_entry, first_matches, first_tc, first_norm) :: rest ->
+  | (first_entry, first_matches, first_tc, _, _) :: _ ->
       let first_year_match = match query_year with
         | None -> false
         | Some qy -> Option.value_map first_entry.Imdb_data.year ~default:false ~f:(fun y -> y = qy)
       in
       (* Find all candidates tied with the best ranking (tokens, count, and year) *)
-      let tied = (first_entry, first_matches, first_tc, first_norm) ::
-        List.take_while rest ~f:(fun (entry, m, tc, _) ->
+      let tied = List.take_while candidates ~f:(fun (entry, m, tc, _, _) ->
           m = first_matches && tc = first_tc &&
           (match query_year with
            | None -> true
@@ -103,11 +104,13 @@ let select_best ~norm_query ~query_year candidates =
                let year_match = Option.value_map entry.Imdb_data.year ~default:false ~f:(fun y -> y = qy) in
                Bool.equal year_match first_year_match))
       in
-      (* Among tied candidates, pick the one with lowest weighted edit distance *)
+      (* Among tied candidates, pick the one with lowest weighted edit distance,
+         considering both primary and secondary titles *)
       tied
-      |> List.map ~f:(fun (entry, _, _, _normalized) ->
-          let dist = Normalize.weighted_edit_distance norm_query entry.Imdb_data.primary_title in
-          (entry, dist))
+      |> List.map ~f:(fun (entry, _, _, norm_primary, norm_secondary) ->
+          let dist_primary = Normalize.weighted_edit_distance norm_query norm_primary in
+          let dist_secondary = Normalize.weighted_edit_distance norm_query norm_secondary in
+          (entry, Float.min dist_primary dist_secondary))
       |> List.min_elt ~compare:(fun (_, a_dist) (_, b_dist) ->
           Float.compare a_dist b_dist)
       |> Option.map ~f:(fun (entry, _dist) -> entry)
@@ -122,12 +125,13 @@ let search t ~query ~year ~title_types =
       lookup t ~query_tokens
       |> List.map ~f:(fun idx -> t.titles.(idx))
       |> List.filter ~f:(fun { entry; _ } -> matches_title_types ~title_types entry)
-      |> List.map ~f:(fun { entry; tokens; token_count; normalized } ->
+      |> List.map ~f:(fun { entry; tokens; token_count;
+                          normalized_primary; normalized_secondary } ->
           let matches = count_matches ~query_tokens ~title_tokens:tokens in
-          (entry, matches, token_count, normalized)
+          (entry, matches, token_count, normalized_primary, normalized_secondary)
         )
-      |> List.filter ~f:(fun (_, matches, _, _) -> matches > 0)
-      |> List.sort ~compare:(fun (a_e, a_m, a_tc, _) (b_e, b_m, b_tc, _) ->
+      |> List.filter ~f:(fun (_, matches, _, _, _) -> matches > 0)
+      |> List.sort ~compare:(fun (a_e, a_m, a_tc, _, _) (b_e, b_m, b_tc, _, _) ->
           compare_candidates ~query_year:year (a_e, a_m, a_tc) (b_e, b_m, b_tc))
       |> select_best ~norm_query ~query_year:year
       |> Option.map ~f:(fun entry ->
