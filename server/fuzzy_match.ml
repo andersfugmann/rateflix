@@ -15,6 +15,7 @@ type t = {
   inverted_index: (string, int list) Hashtbl.t;
   normalize: string -> string;
   tokenize: string -> string list;
+  stopwords: Set.M(String).t;
 }
 
 (** Build inverted index from title entries *)
@@ -25,7 +26,6 @@ let build ~normalize ~tokenize titles =
       let norm2 = normalize entry.Imdb_data.secondary_title in
       let tokens1 = tokenize norm1 in
       let tokens2 = tokenize norm2 in
-      (* Combine tokens from both titles, deduplicated *)
       let tokens = List.dedup_and_sort ~compare:String.compare (tokens1 @ tokens2) in
       { entry; tokens; token_count = List.length tokens1;
         normalized_primary = norm1; normalized_secondary = norm2 }
@@ -36,7 +36,20 @@ let build ~normalize ~tokenize titles =
           Hashtbl.add_multi inverted_index ~key:token ~data:idx
         )
     );
-  { titles = indexed_titles; inverted_index; normalize; tokenize }
+  (* Identify stopword tokens: short (<4 chars) and in >2% of titles *)
+  let num_titles = Array.length indexed_titles in
+  let threshold = num_titles / 50 in
+  let stopwords = Hashtbl.fold inverted_index ~init:(Set.empty (module String))
+    ~f:(fun ~key:token ~data:indices acc ->
+      if String.length token < 4 && List.length indices > threshold
+      then Set.add acc token else acc)
+  in
+  if not (Set.is_empty stopwords) then
+    Stdlib.Printf.printf "Identified %d stopword tokens (<4 chars, >%d titles): %s\n%!"
+      (Set.length stopwords) threshold
+      (String.concat ~sep:", " (Set.to_list stopwords));
+  { titles = indexed_titles; inverted_index; normalize; tokenize;
+    stopwords }
 
 (** Print histogram of token frequency distribution *)
 let print_token_histogram t =
@@ -66,10 +79,17 @@ let print_token_histogram t =
 
 (** Find candidate indices with match counts.
     Counts how many query tokens each candidate shares, then returns
-    only candidates with the maximum match count in a single fold. *)
+    only candidates with the maximum match count in a single fold.
+    Skips stopword tokens when non-stopword tokens are available. *)
 let lookup t ~query_tokens =
+  let non_stopword_tokens = List.filter query_tokens
+    ~f:(fun token -> not (Set.mem t.stopwords token)) in
+  let effective_tokens =
+    if List.length non_stopword_tokens >= 1 then non_stopword_tokens
+    else query_tokens
+  in
   let counts = Hashtbl.create ~size:1000 (module Int) in
-  List.iter query_tokens ~f:(fun token ->
+  List.iter effective_tokens ~f:(fun token ->
       Hashtbl.find_multi t.inverted_index token
       |> List.iter ~f:(fun idx ->
           Hashtbl.update counts idx ~f:(function
