@@ -38,21 +38,25 @@ let build ~normalize ~tokenize titles =
     );
   { titles = indexed_titles; inverted_index; normalize; tokenize }
 
-(** Find candidate indices that share at least one token with query *)
+(** Find candidate indices with match counts.
+    Counts how many query tokens each candidate shares.
+    Only returns candidates matching at least [min_matches] tokens. *)
 let lookup t ~query_tokens =
-  let seen = Hashtbl.create ~size:1000 (module Int) in
+  let num_query_tokens = List.length query_tokens in
+  let counts = Hashtbl.create ~size:1000 (module Int) in
   List.iter query_tokens ~f:(fun token ->
       Hashtbl.find_multi t.inverted_index token
       |> List.iter ~f:(fun idx ->
-          Hashtbl.set seen ~key:idx ~data:()
+          Hashtbl.update counts idx ~f:(function
+            | None -> 1
+            | Some n -> n + 1)
         )
     );
-  Hashtbl.keys seen
-
-(** Count how many query tokens appear in the title's tokens *)
-let count_matches ~query_tokens ~title_tokens =
-  let title_set = Set.of_list (module String) title_tokens in
-  List.count query_tokens ~f:(fun token -> Set.mem title_set token)
+  (* Only keep candidates matching at least half the query tokens,
+     but always at least 1 *)
+  let min_matches = max 1 (num_query_tokens / 2) in
+  Hashtbl.fold counts ~init:[] ~f:(fun ~key:idx ~data:count acc ->
+    if count >= min_matches then (idx, count) :: acc else acc)
 
 (** Check if title type matches filter *)
 let matches_title_types ~title_types entry =
@@ -131,14 +135,11 @@ let search t ~query ~year ~title_types =
   | 0 -> None
   | _ ->
       lookup t ~query_tokens
-      |> List.filter_map ~f:(fun idx ->
-          let { entry; tokens; token_count;
+      |> List.filter_map ~f:(fun (idx, matches) ->
+          let { entry; tokens = _; token_count;
                 normalized_primary; normalized_secondary } = t.titles.(idx) in
           if not (matches_title_types ~title_types entry) then None
-          else
-            let matches = count_matches ~query_tokens ~title_tokens:tokens in
-            if matches = 0 then None
-            else Some (entry, matches, token_count, normalized_primary, normalized_secondary))
+          else Some (entry, matches, token_count, normalized_primary, normalized_secondary))
       |> List.sort ~compare:(fun (a_e, a_m, a_tc, _, _) (b_e, b_m, b_tc, _, _) ->
           compare_candidates ~query_year:year (a_e, a_m, a_tc) (b_e, b_m, b_tc))
       |> select_best ~norm_query ~query_year:year
