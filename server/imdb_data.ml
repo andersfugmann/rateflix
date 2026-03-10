@@ -66,16 +66,17 @@ let read ~filter dir =
     Eio.Path.with_lines ratings parse_ratings
   in
 
-  let no_rating_count = ref 0 in
   let parse_basics seq =
+    let total_basics = ref 0 in
     let result =
       seq
       |> Seq.drop 1
       |> Seq.map (String.split_on_char '\t')
       |> Seq.filter_map parse_basics_row
+      |> Seq.map (fun basic -> incr total_basics; basic)
       |> Seq.filter_map (fun basic ->
           match Hashtbl.find_opt ratings_table basic.b_tconst with
-          | None -> incr no_rating_count; None
+          | None -> None
           | Some rating -> Some (basic, rating)
         )
       |> Seq.map (fun (basic, rating) ->
@@ -92,7 +93,8 @@ let read ~filter dir =
       |> Seq.filter filter
       |> Array.of_seq
     in
-    Printf.printf "Skipped %d titles without ratings\n%!" !no_rating_count;
+    let with_ratings = Array.length result in
+    Printf.printf "Skipped %d titles without ratings\n%!" (!total_basics - with_ratings);
     result
   in
   let basics = Eio.Path.(dir / "title.basics.tsv") in
