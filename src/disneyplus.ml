@@ -33,40 +33,41 @@ let parse_title =
   in
 
 
-  let parse title =
-    let rec inner title unmatched = function
-      | prefix :: xs -> begin
-          match Regexp.search prefix title 0 with
-          | Some (0, result) ->
-            let len = Regexp.matched_string result |> String.length in
-            let title' =
-              String.sub ~pos:len ~len:(String.length title - len) title
-              |> String.trim
-            in
-            inner title' [] (unmatched @ xs)
-          | _ ->
-            inner title (prefix :: unmatched) xs
-        end
-      | [] -> title
+  let strip_prefix title prefixes =
+    let try_one title prefix =
+      match Regexp.search prefix title 0 with
+      | Some (0, result) ->
+        let len = Regexp.matched_string result |> String.length in
+        Some (String.sub ~pos:len ~len:(String.length title - len) title
+              |> String.trim)
+      | _ -> None
     in
+    let rec loop title =
+      match List.find_map ~f:(try_one title) prefixes with
+      | Some title' -> loop title'
+      | None -> title
+    in
+    loop title
+  in
 
-    let title = inner title [] title_prefixes in
-
+  let strip_postfix title postfixes =
     let index =
       List.fold_left ~init:None ~f:(fun acc re ->
           match acc, Regexp.search re title 0 with
           | Some n, Some (m, result) when Regexp.matched_string result <> "" && m < n -> Some m
           | None, Some (m, result) when Regexp.matched_string result <> "" -> Some m
           | _ -> acc
-        ) title_postfixes
+        ) postfixes
     in
     match index with
     | None -> title
-    | Some len ->
-      String.sub ~pos:0 ~len title
+    | Some len -> String.sub ~pos:0 ~len title
   in
+
   fun title ->
-    parse title |> String.trim, None
+    let title = strip_prefix title title_prefixes in
+    let title = strip_postfix title title_postfixes in
+    String.trim title, None
 
 let process_carousel =
   Plugin.process
