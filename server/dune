@@ -1,6 +1,7 @@
 (library
- (name normalize_lib)
+ (name normalize)
  (modules normalize)
+ (wrapped false)
  (libraries uutf uunf uucp)
  (inline_tests)
  (preprocess (pps ppx_expect)))
@@ -11,7 +12,7 @@
  (package rateflix-server)
  (modules :standard \ normalize)
  (libraries
-   normalize_lib
+   normalize
    cohttp-eio
    eio
    eio_main

@@ -9,7 +9,7 @@ let load_data ~fs ~data_dir =
     in
     Imdb_data.read ~filter Eio.Path.(fs / data_dir)
   in
-  let index = Fuzzy_match.build ~normalize:Normalize_lib.Normalize.normalize ~tokenize:Normalize_lib.Normalize.tokenize titles in
+  let index = Fuzzy_match.build ~normalize:Normalize.normalize ~tokenize:Normalize.tokenize titles in
   { Handlers.index }
 
 (** Reload data on separate domain to avoid blocking requests *)

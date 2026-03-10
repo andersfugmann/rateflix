@@ -1,8 +1,6 @@
 (** Token-based matching using inverted index, with edit distance scoring *)
 open Base
 
-module Normalize = Normalize_lib.Normalize
-
 (** Indexed title with precomputed tokens and normalized strings *)
 type indexed_title = {
   entry: Imdb_data.title_entry;
