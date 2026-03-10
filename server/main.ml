@@ -79,6 +79,7 @@ let main () =
   let initial_state = load_data ~fs ~data_dir:config.data_dir in
   let state_ref = Atomic.make initial_state in
   Printf.printf "Data loaded, %d titles indexed\n%!" (Array.length initial_state.index.Fuzzy_match.titles);
+  Fuzzy_match.print_token_histogram initial_state.index;
 
   let queue : Server.work_queue = Eio.Stream.create 0 in
 

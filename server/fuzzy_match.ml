@@ -38,6 +38,32 @@ let build ~normalize ~tokenize titles =
     );
   { titles = indexed_titles; inverted_index; normalize; tokenize }
 
+(** Print histogram of token frequency distribution *)
+let print_token_histogram t =
+  let freqs = Hashtbl.map t.inverted_index ~f:List.length in
+  (* Bucket boundaries: 1, 2-5, 6-10, 11-50, 51-100, 101-500, 501-1K, 1K-5K, 5K-10K, 10K+ *)
+  let buckets = [| 1; 5; 10; 50; 100; 500; 1_000; 5_000; 10_000; Int.max_value |] in
+  let bucket_counts = Array.create ~len:(Array.length buckets) 0 in
+  let top_tokens = ref [] in
+  Hashtbl.iteri freqs ~f:(fun ~key:token ~data:count ->
+    let idx = Array.findi_exn buckets ~f:(fun _ b -> count <= b) |> fst in
+    bucket_counts.(idx) <- bucket_counts.(idx) + 1;
+    if count > 1000 then top_tokens := (token, count) :: !top_tokens);
+  let labels = [| "1"; "2-5"; "6-10"; "11-50"; "51-100"; "101-500";
+                  "501-1K"; "1K-5K"; "5K-10K"; "10K+" |] in
+  Stdlib.Printf.printf "Token frequency histogram (%d unique tokens):\n%!"
+    (Hashtbl.length t.inverted_index);
+  Array.iteri labels ~f:(fun i label ->
+    if bucket_counts.(i) > 0 then
+      Stdlib.Printf.printf "  %8s: %d tokens\n%!" label bucket_counts.(i));
+  let top = List.sort !top_tokens ~compare:(fun (_, a) (_, b) -> Int.compare b a) in
+  (match List.take top 20 with
+   | [] -> ()
+   | top ->
+     Stdlib.Printf.printf "Top tokens (>1000 titles):\n%!";
+     List.iter top ~f:(fun (token, count) ->
+       Stdlib.Printf.printf "  %-20s %d\n%!" token count))
+
 (** Find candidate indices with match counts.
     Counts how many query tokens each candidate shares, then returns
     only candidates with the maximum match count in a single fold. *)
