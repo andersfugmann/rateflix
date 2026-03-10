@@ -17,6 +17,7 @@ type t = {
   inverted_index: (string, int array) Hashtbl.t;
   normalize: string -> string;
   tokenize: string -> string list;
+  counts: Bytes.t;
 }
 
 (** Build inverted index from title entries *)
@@ -40,7 +41,8 @@ let build ~normalize ~tokenize titles =
         )
     );
   let inverted_index = Hashtbl.map lists ~f:Array.of_list in
-  { titles = indexed_titles; inverted_index; normalize; tokenize }
+  let counts = Bytes.make (Array.length indexed_titles) '\000' in
+  { titles = indexed_titles; inverted_index; normalize; tokenize; counts }
 
 (** Print histogram of token frequency distribution *)
 let print_token_histogram t =
@@ -72,27 +74,28 @@ let print_token_histogram t =
     Counts how many query tokens each candidate shares, then returns
     only candidates with the maximum match count in a single fold. *)
 let lookup t ~query_tokens =
-  let counts = Hashtbl.create ~size:100000 (module Int) in
+  let counts = t.counts in
+  let touched = ref [] in
   List.iter query_tokens ~f:(fun token ->
       match Hashtbl.find t.inverted_index token with
       | None -> ()
       | Some arr ->
         Array.iter arr ~f:(fun idx ->
-            Hashtbl.update counts idx ~f:(function
-              | None -> 1
-              | Some n -> n + 1)
+            let prev = Char.to_int (Bytes.get counts idx) in
+            if prev = 0 then touched := idx :: !touched;
+            Bytes.set counts idx (Char.of_int_exn (prev + 1))
           )
     );
-  let total = Hashtbl.length counts in
-  let (_, tied) =
-    Hashtbl.fold counts ~init:(0, []) ~f:(fun ~key:idx ~data:count (best, acc) ->
-        match count with
-        | count when count < best -> (best, acc)
-        | count when count > best -> (count, [idx])
-        | _ -> (best, idx :: acc)
-      )
-  in
-  (total, tied)
+  let total = List.length !touched in
+  let best = ref 0 in
+  let tied = ref [] in
+  List.iter !touched ~f:(fun idx ->
+      let count = Char.to_int (Bytes.get counts idx) in
+      Bytes.set counts idx '\000';
+      if count > !best then (best := count; tied := [idx])
+      else if count = !best then tied := idx :: !tied
+    );
+  (total, !tied)
 
 (** Check if title type matches filter *)
 let matches_title_types ~title_types entry =
