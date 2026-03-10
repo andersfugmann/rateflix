@@ -139,12 +139,16 @@ let search t ~query ~year ~title_types =
   match List.length query_tokens with
   | 0 -> None
   | _ ->
+      let query_len = String.length norm_query in
       lookup t ~query_tokens
       |> List.filter_map ~f:(fun (idx, _matches) ->
           let { entry; tokens = _; token_count = _;
                 normalized_primary; normalized_secondary } = t.titles.(idx) in
           if not (matches_title_types ~title_types entry) then None
           else Some (entry, normalized_primary, normalized_secondary))
+      |> List.sort ~compare:(fun (_, p1, s1) (_, p2, s2) ->
+          let len a b = Int.abs (String.length a - query_len) |> Int.min (Int.abs (String.length b - query_len)) in
+          Int.compare (len p1 s1) (len p2 s2))
       |> select_best ~norm_query ~query_year:year
       |> Option.map ~f:(fun (entry, stats) ->
           let score = calculate_score ~query ~title:entry.Imdb_data.primary_title in
