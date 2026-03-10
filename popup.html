@@ -118,21 +118,6 @@
       background: var(--primary-dark);
       transform: translateY(-2px) scale(1.03);
     }
-    #clear-cache {
-      background: var(--border);
-      color: var(--primary-dark);
-      font-size: 0.95em;
-      padding: 6px 14px;
-      margin-top: 0;
-      margin-right: 0;
-      border-radius: 6px;
-      box-shadow: none;
-      transition: background 0.2s, color 0.2s;
-    }
-    #clear-cache:hover {
-      background: var(--primary-light);
-      color: #fff;
-    }
     .form-group {
       margin-bottom: 18px;
       display: flex;
@@ -213,22 +198,6 @@
       font-weight: 500;
       transition: color 0.2s;
     }
-    .cache-info {
-      margin-top: 12px;
-      padding-top: 10px;
-      border-top: 1px solid var(--border);
-      color: var(--primary-dark);
-      font-size: 0.98em;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      transition: border 0.2s, color 0.2s;
-    }
-    .cache-info p {
-      margin: 0;
-      font-size: 0.98em;
-      color: var(--primary-dark);
-    }
     @media (max-width: 400px) {
       .card, .header {
         margin: 0;
@@ -247,10 +216,6 @@
     <div class="form-group omdb-key-group">
       <input type="text" id="apikey" name="apikey" placeholder="Enter your OMDb API key" required />
       <button id="apikey-save" type="submit">Save</button>
-    </div>
-    <div class="cache-info">
-      <p>Cached entries: <span id="cache-count">-</span></p>
-      <button id="clear-cache">Clear Cache</button>
     </div>
   </div>
   <div class="card">

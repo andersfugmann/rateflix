@@ -16,12 +16,6 @@ let show_status status_div msg =
       (Js.number_of_float 2000.) in
   ()
 
-let update_cache_count count_elem =
-  let* count = Lib.Storage.count_cache_entries () in
-  let text = Js.string (string_of_int count) in
-  count_elem##.innerHTML := text;
-  Lwt.return_unit
-
 (* Update a slider's display value *)
 let set_transparency_display_value id value =
   let value_span_id = id ^ "-value" in
@@ -125,7 +119,6 @@ let run () =
   let* transparency = Transparency.load () in
   set_transparency_settings transparency;
 
-  (* Initialize cache count display *)
   let callback () = () in
 
   (* Set up transparency sliders with immediate values *)
@@ -135,10 +128,6 @@ let run () =
   let apikey_el = getElementById_coerce "apikey" CoerceTo.input |> Option.get in
   let status_el = getElementById "status" in
   let apikey_save_el = getElementById "apikey-save" in
-  let cache_count = getElementById "cache-count" in
-  let clear_cache_el = getElementById "clear-cache" in
-
-  Lwt.ignore_result(update_cache_count cache_count);
 
   Dom_html.addEventListener apikey_save_el Dom_html.Event.click
     (Dom_html.handler
@@ -146,20 +135,6 @@ let run () =
           let key = Js.to_string apikey_el##.value |> String.trim in
           Lwt.ignore_result @@ Lib.Storage.save_key Lib.Omdb.omdb_key key;
           show_status status_el "Api key saved";
-          Js._false
-       )) Js._false
-  |> ignore;
-
-  Dom_html.addEventListener clear_cache_el Dom_html.Event.click
-    (Dom_html.handler
-       (fun _ ->
-          let inner () =
-            let* () = Lib.Storage.clear_cache () in
-            let* () = update_cache_count cache_count in
-            Lwt.return_none
-          in
-          Lwt.ignore_result (inner ());
-          show_status status_el "Cache cleared";
           Js._false
        )) Js._false
   |> ignore;
