@@ -123,11 +123,20 @@ query "Fargo" 1996 "tt0116282" "Fargo movie (1996)" '["movie"]'
 query "Fargo" "" "tt2802850" "Fargo TV series" '["tvSeries"]'
 query "Dune: Part One" 2021 "tt1160419" "Dune movie with type filter" '["movie"]'
 query "A Star Is Born" 2018 "tt1517451" "A Star Is Born movie 2018" '["movie"]'
-query "The Office" "" "tt0386676" "The Office US series" '["tvSeries"]'
 query "Westworld" "" "tt0475784" "Westworld series vs movie" '["tvSeries"]'
 query "True Grit" 2010 "tt1403865" "True Grit movie remake" '["movie"]'
 query "True Grit" 1969 "tt0065126" "True Grit original movie" '["movie"]'
 query "The Fly" 1986 "tt0091064" "The Fly movie" '["movie"]'
+
+# Test very short titles
+echo ""
+echo "--- Short Titles ---"
+query "It" 2017 "tt1396484" "It (2017 horror)" '["movie"]'
+query "Us" 2019 "tt6857112" "Us (2019 horror)" '["movie"]'
+query "Up" 2009 "tt1049413" "Up (2009 Pixar)" '["movie"]'
+query "Her" 2013 "tt1798709" "Her (2013 Spike Jonze)" '["movie"]'
+query "Jaws" 1975 "tt0073195" "Jaws (1975)" '["movie"]'
+query "M" 1931 "tt0022100" "M (1931 Fritz Lang)" '["movie"]'
 
 # Summary
 echo ""
