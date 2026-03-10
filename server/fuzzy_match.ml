@@ -198,5 +198,7 @@ let search t ~query ~year ~title_types =
       |> List.map ~f:(fun (entry, _, _, up, us) -> (entry, up, us))
       |> select_best ~query_uchars ~query_year:year
       |> Option.map ~f:(fun (entry, _) ->
-          let score = calculate_score ~query ~title:entry.Imdb_data.primary_title in
+          let score_primary = calculate_score ~query ~title:entry.Imdb_data.primary_title in
+          let score_secondary = calculate_score ~query ~title:entry.Imdb_data.secondary_title in
+          let score = Float.max score_primary score_secondary in
           (entry, score, { candidates = total_candidates; tied = num_tied }))
