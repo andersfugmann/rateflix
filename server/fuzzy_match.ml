@@ -120,37 +120,33 @@ type search_stats = {
   tied: int;
 }
 
-(** Take candidates with best token ranking, then pick best by edit distance *)
+(** Select best candidate by edit distance, with year preference.
+    All candidates already have the maximum token match count. *)
 let select_best ~norm_query ~query_year candidates =
   let num_candidates = List.length candidates in
   match candidates with
   | [] -> None
-  | (first_entry, first_matches, first_tc, _, _) :: _ ->
-      let first_year_match = match query_year with
-        | None -> false
-        | Some qy -> Option.value_map first_entry.Imdb_data.year ~default:false ~f:(fun y -> y = qy)
-      in
-      let tied = List.take_while candidates ~f:(fun (entry, m, tc, _, _) ->
-          m = first_matches && tc = first_tc &&
-          (match query_year with
-           | None -> true
-           | Some qy ->
-               let year_match = Option.value_map entry.Imdb_data.year ~default:false ~f:(fun y -> y = qy) in
-               Bool.equal year_match first_year_match))
-      in
-      let num_tied = List.length tied in
+  | _ ->
+      (* Among all candidates, pick the one with lowest weighted edit distance.
+         Track best distance so far to short-circuit via max_edits. *)
       let best =
-        List.fold_left tied ~init:None ~f:(fun acc (entry, _, _, norm_primary, norm_secondary) ->
-          let max_edits = Option.map acc ~f:snd in
+        List.fold_left candidates ~init:None ~f:(fun acc (entry, _, _, norm_primary, norm_secondary) ->
+          let max_edits = Option.map acc ~f:(fun (_, d, _) -> d) in
           let dist_primary = Normalize.weighted_edit_distance ?max_edits norm_query norm_primary in
           let dist_secondary = Normalize.weighted_edit_distance ?max_edits norm_query norm_secondary in
           let dist = Float.min dist_primary dist_secondary in
+          let year_match = match query_year with
+            | Some qy -> Option.value_map entry.Imdb_data.year ~default:false ~f:(fun y -> y = qy)
+            | None -> false
+          in
           match acc with
-          | Some (_, best_dist) when Float.( >= ) dist best_dist -> acc
-          | _ -> Some (entry, dist))
+          | Some (_, best_dist, _) when Float.( < ) dist best_dist -> Some (entry, dist, year_match)
+          | Some (_, best_dist, best_year) when Float.equal dist best_dist && (not best_year) && year_match -> Some (entry, dist, year_match)
+          | Some _ -> acc
+          | None -> Some (entry, dist, year_match))
       in
-      let stats = { candidates = num_candidates; tied = num_tied } in
-      Option.map best ~f:(fun (entry, _dist) -> (entry, stats))
+      let stats = { candidates = num_candidates; tied = num_candidates } in
+      Option.map best ~f:(fun (entry, _dist, _) -> (entry, stats))
 
 (** Search for best matching title *)
 let search t ~query ~year ~title_types =
