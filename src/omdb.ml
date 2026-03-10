@@ -29,6 +29,10 @@ let omdb_rate_limit = "Request limit reached!"
 (** Parse IMDb rating string to float option *)
 let parse_rating rating_str = float_of_string_opt rating_str
 
+let parse_response json_str =
+  try Ok (omdb_response_of_json json_str)
+  with e -> Error (Printf.sprintf "Parse error: %s. %s" (Printexc.to_string e) json_str)
+
 let fetch_imdb_rating ?year title : (float option, _) Lwt_result.t =
   let encodeUri str = str |> Js.string |> Js.encodeURI |> Js.to_string in
   let* api_key = Storage.load_key omdb_key in
@@ -40,29 +44,13 @@ let fetch_imdb_rating ?year title : (float option, _) Lwt_result.t =
     | None -> u
   in
   let* frame = XmlHttpRequest.perform_raw ~response_type:Text url in
-  match frame with
-  | { code = 200; content = body; _ } ->
-    begin
-      let json_str = Js.to_string body in
-      try
-        (* Parse the JSON response using our safe deserializing *)
-        let response = omdb_response_of_json json_str in
-        match response.imdbRating with
-        | Some rating -> Lwt_result.return (parse_rating rating)
-        | None -> Lwt_result.return None
-      with e ->
-        let msg = Printf.sprintf "Parse error: %s. %s" (Printexc.to_string e) json_str in
-        Lwt_result.fail (msg, `Retry)
-    end
-  | { code; content = body; _ } ->
-    let json_str = Js.to_string body in
-    try
-      (* Parse the JSON response using our safe deserializing *)
-      let response = omdb_response_of_json json_str in
-      match code, response.error with
-      | 401, Some msg when String.equal msg omdb_rate_limit -> Lwt_result.fail (msg, `RateLimit)
-      | _, Some msg -> Lwt_result.fail (msg, `Retry)
-      | _, None -> Lwt_result.fail (Printf.sprintf "Error: %d" code, `Retry)
-    with e ->
-      let msg = Printf.sprintf "Parse error: %s. %s" (Printexc.to_string e) json_str in
-      Lwt_result.fail (msg, `Retry)
+  let json_str = Js.to_string frame.content in
+  match parse_response json_str with
+  | Error msg -> Lwt_result.fail (msg, `Retry)
+  | Ok response ->
+    match frame.code, response.error, response.imdbRating with
+    | 200, _, Some rating -> Lwt_result.return (parse_rating rating)
+    | 200, _, None -> Lwt_result.return None
+    | 401, Some msg, _ when String.equal msg omdb_rate_limit -> Lwt_result.fail (msg, `RateLimit)
+    | _, Some msg, _ -> Lwt_result.fail (msg, `Retry)
+    | code, None, _ -> Lwt_result.fail (Printf.sprintf "Error: %d" code, `Retry)
