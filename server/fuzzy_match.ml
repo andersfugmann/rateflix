@@ -30,8 +30,8 @@ let build ~normalize ~tokenize titles =
       let tokens = List.dedup_and_sort ~compare:String.compare (tokens1 @ tokens2) in
       { entry; tokens; token_count = List.length tokens1;
         normalized_primary = norm1; normalized_secondary = norm2;
-        uchars_primary = Normalize.to_uchars norm1;
-        uchars_secondary = Normalize.to_uchars norm2 }
+        uchars_primary = Normalize.to_uchars entry.Imdb_data.primary_title;
+        uchars_secondary = Normalize.to_uchars entry.Imdb_data.secondary_title }
     )
   in
   Array.iteri indexed_titles ~f:(fun idx { tokens; _ } ->
@@ -185,30 +185,28 @@ let select_best ~query ~query_uchars ~query_year candidates =
 (** Search for best matching title *)
 let search t ~query ~year ~title_types =
   let norm_query = t.normalize query in
-  let query_uchars = Normalize.to_uchars norm_query in
+  let query_uchars = Normalize.to_uchars query in
   let query_tokens = t.tokenize norm_query in
   match query_tokens with
   | [] -> None
   | _ ->
-      let query_len = String.length norm_query in
+      let query_len = String.length query in
       let (total_candidates, raw) = lookup t ~query_tokens in
       let candidates =
         raw
         |> List.filter_map ~f:(fun idx ->
-            let { entry; normalized_primary; normalized_secondary;
-                  uchars_primary; uchars_secondary; _ } = t.titles.(idx) in
+            let { entry; uchars_primary; uchars_secondary; _ } = t.titles.(idx) in
             match matches_title_types ~title_types entry with
             | false -> None
-            | true -> Some (entry, normalized_primary, normalized_secondary,
-                           uchars_primary, uchars_secondary))
-        |> List.sort ~compare:(fun (_, p1, s1, _, _) (_, p2, s2, _, _) ->
-            let len a b = Int.min (Int.abs (String.length a - query_len))
-                                  (Int.abs (String.length b - query_len)) in
-            Int.compare (len p1 s1) (len p2 s2))
+            | true -> Some (entry, uchars_primary, uchars_secondary))
+        |> List.sort ~compare:(fun (e1, _, _) (e2, _, _) ->
+            let len e = Int.min
+              (Int.abs (String.length e.Imdb_data.primary_title - query_len))
+              (Int.abs (String.length e.Imdb_data.secondary_title - query_len)) in
+            Int.compare (len e1) (len e2))
       in
       let num_tied = List.length candidates in
       candidates
-      |> List.map ~f:(fun (entry, _, _, up, us) -> (entry, up, us))
       |> select_best ~query ~query_uchars ~query_year:year
       |> Option.map ~f:(fun (entry, _) ->
           let score_primary = calculate_score ~query ~title:entry.Imdb_data.primary_title in
