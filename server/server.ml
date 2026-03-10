@@ -1,9 +1,9 @@
 (** HTTP server using Cohttp-eio *)
 
-type work_queue = (Types.query * Types.search_result Eio.Promise.u) Eio.Stream.t
+type work_queue = (Types.query * (Types.search_result * Fuzzy_match.search_stats option) Eio.Promise.u) Eio.Stream.t
 
 (** Post queries to worker queue and await results *)
-let lookup ~queue (request : Types.request) : Types.response =
+let lookup ~queue (request : Types.request) =
   let promises =
     request
     |> List.map (fun query ->
@@ -13,7 +13,8 @@ let lookup ~queue (request : Types.request) : Types.response =
   in
   promises
   |> List.map (fun (query, promise) ->
-       (query, Eio.Promise.await promise))
+       let (result, stats) = Eio.Promise.await promise in
+       (query, result, stats))
 
 (** Format client address *)
 let client_addr conn =
@@ -21,8 +22,8 @@ let client_addr conn =
   Format.asprintf "%a" Eio.Net.Sockaddr.pp peer_addr
 
 (** Log a response line for each query/result pair *)
-let log_response addr (response : (Types.query * Types.search_result) list) =
-  List.iter (fun ((query : Types.query), (result : Types.search_result)) ->
+let log_response addr responses =
+  List.iter (fun ((query : Types.query), (result : Types.search_result), stats) ->
     let year_str = match query.year with
       | Some y -> Printf.sprintf " (%d)" y
       | None -> ""
@@ -31,9 +32,14 @@ let log_response addr (response : (Types.query * Types.search_result) list) =
       | Some y -> Printf.sprintf " (%d)" y
       | None -> ""
     in
-    Printf.printf "[%s] \"%s\"%s -> \"%s\"%s %.2f\n%!"
-      addr query.title year_str result.title result_year_str result.match_score
-  ) response
+    let stats_str = match stats with
+      | Some (s : Fuzzy_match.search_stats) ->
+        Printf.sprintf " [candidates: %d, tied: %d]" s.candidates s.tied
+      | None -> " [no match]"
+    in
+    Printf.printf "[%s] \"%s\"%s -> \"%s\"%s %.2f%s\n%!"
+      addr query.title year_str result.title result_year_str result.match_score stats_str
+  ) responses
 
 (** Handle a single HTTP request *)
 let handle_request ~queue ~addr body =
@@ -42,8 +48,9 @@ let handle_request ~queue ~addr body =
   |> Types.request_of_yojson
   |> function
      | Ok request ->
-         let response = lookup ~queue request in
-         log_response addr response;
+         let results = lookup ~queue request in
+         log_response addr results;
+         let response = List.map (fun (q, r, _) -> (q, r)) results in
          response
          |> Types.response_to_yojson
          |> Yojson.Safe.to_string

@@ -86,8 +86,14 @@ let calculate_score ~query ~title =
   | 0 -> 1.0
   | _ -> 1.0 -. (distance /. Float.of_int max_len)
 
+type search_stats = {
+  candidates: int;
+  tied: int;
+}
+
 (** Take candidates with best token ranking, then pick best by edit distance *)
 let select_best ~norm_query ~query_year candidates =
+  let num_candidates = List.length candidates in
   match candidates with
   | [] -> None
   | (first_entry, first_matches, first_tc, _, _) :: _ ->
@@ -95,7 +101,6 @@ let select_best ~norm_query ~query_year candidates =
         | None -> false
         | Some qy -> Option.value_map first_entry.Imdb_data.year ~default:false ~f:(fun y -> y = qy)
       in
-      (* Find all candidates tied with the best ranking (tokens, count, and year) *)
       let tied = List.take_while candidates ~f:(fun (entry, m, tc, _, _) ->
           m = first_matches && tc = first_tc &&
           (match query_year with
@@ -104,9 +109,7 @@ let select_best ~norm_query ~query_year candidates =
                let year_match = Option.value_map entry.Imdb_data.year ~default:false ~f:(fun y -> y = qy) in
                Bool.equal year_match first_year_match))
       in
-      (* Among tied candidates, pick the one with lowest weighted edit distance,
-         considering both primary and secondary titles.
-         Track best distance so far to short-circuit via max_edits. *)
+      let num_tied = List.length tied in
       let best =
         List.fold_left tied ~init:None ~f:(fun acc (entry, _, _, norm_primary, norm_secondary) ->
           let max_edits = Option.map acc ~f:snd in
@@ -117,7 +120,8 @@ let select_best ~norm_query ~query_year candidates =
           | Some (_, best_dist) when Float.( >= ) dist best_dist -> acc
           | _ -> Some (entry, dist))
       in
-      Option.map best ~f:(fun (entry, _dist) -> entry)
+      let stats = { candidates = num_candidates; tied = num_tied } in
+      Option.map best ~f:(fun (entry, _dist) -> (entry, stats))
 
 (** Search for best matching title *)
 let search t ~query ~year ~title_types =
@@ -138,6 +142,6 @@ let search t ~query ~year ~title_types =
       |> List.sort ~compare:(fun (a_e, a_m, a_tc, _, _) (b_e, b_m, b_tc, _, _) ->
           compare_candidates ~query_year:year (a_e, a_m, a_tc) (b_e, b_m, b_tc))
       |> select_best ~norm_query ~query_year:year
-      |> Option.map ~f:(fun entry ->
+      |> Option.map ~f:(fun (entry, stats) ->
           let score = calculate_score ~query ~title:entry.Imdb_data.primary_title in
-          (entry, score))
+          (entry, score, stats))
