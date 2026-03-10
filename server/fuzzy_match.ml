@@ -20,6 +20,12 @@ type t = {
   counts: Bytes.t;
 }
 
+(** Minimum token length exempt from frequency filtering *)
+let min_stopword_length = 4
+
+(** Maximum fraction of titles a short token may appear in before being filtered *)
+let max_stopword_frequency = 0.02
+
 (** Build inverted index from title entries *)
 let build ~normalize ~tokenize titles =
   let lists = Hashtbl.create ~size:100_000 (module String) in
@@ -40,8 +46,18 @@ let build ~normalize ~tokenize titles =
           Hashtbl.add_multi lists ~key:token ~data:idx
         )
     );
-  let inverted_index = Hashtbl.map lists ~f:Array.of_list in
-  let counts = Bytes.make (Array.length indexed_titles) '\000' in
+  let num_titles = Array.length indexed_titles in
+  let threshold = Float.to_int (Float.of_int num_titles *. max_stopword_frequency) in
+  let filtered = ref 0 in
+  let inverted_index = Hashtbl.filter_mapi lists ~f:(fun ~key:token ~data:entries ->
+      if String.length token < min_stopword_length && List.length entries > threshold then
+        (Int.incr filtered; None)
+      else
+        Some (Array.of_list entries))
+  in
+  Stdlib.Printf.printf "Filtered %d stopword tokens (length < %d, frequency > %.0f%% = %d titles)\n%!"
+    !filtered min_stopword_length (max_stopword_frequency *. 100.0) threshold;
+  let counts = Bytes.make num_titles '\000' in
   { titles = indexed_titles; inverted_index; normalize; tokenize; counts }
 
 (** Print histogram of token frequency distribution *)
@@ -74,6 +90,33 @@ let print_token_histogram t =
     Counts how many query tokens each candidate shares, then returns
     only candidates with the maximum match count in a single fold. *)
 let lookup t ~query_tokens =
+  let counts = Bytes.create (Array.length t.titles) in
+  let touched =
+    List.fold ~init:[] query_tokens ~f:(fun acc token ->
+        match Hashtbl.find t.inverted_index token with
+        | None -> acc
+        | Some arr ->
+          Array.fold ~init:acc arr ~f:(fun acc idx ->
+              let prev = Char.to_int (Bytes.get counts idx) in
+              Bytes.set counts idx (Char.of_int_exn (prev + 1));
+              match prev = 0 with
+              | true -> idx :: acc
+              | false -> acc
+            );
+      )
+  in
+  let total = List.length touched in
+  let (_best, tied) =
+    List.fold ~init:(0, []) touched ~f:(fun (best, acc) idx ->
+        match Char.to_int (Bytes.get counts idx) with
+        | count when count > best -> (count, [idx])
+        | count when count < best -> (best, acc)
+        | _ -> (best, idx :: acc)
+      )
+  in
+  (total, tied)
+
+let _lookup t ~query_tokens =
   let counts = t.counts in
   let touched = ref [] in
   List.iter query_tokens ~f:(fun token ->
