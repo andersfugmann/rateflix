@@ -39,10 +39,9 @@ let build ~normalize ~tokenize titles =
   { titles = indexed_titles; inverted_index; normalize; tokenize }
 
 (** Find candidate indices with match counts.
-    Counts how many query tokens each candidate shares.
-    Only returns candidates matching at least [min_matches] tokens. *)
+    Counts how many query tokens each candidate shares, then returns
+    only candidates with the maximum match count in a single fold. *)
 let lookup t ~query_tokens =
-  let num_query_tokens = List.length query_tokens in
   let counts = Hashtbl.create ~size:1000 (module Int) in
   List.iter query_tokens ~f:(fun token ->
       Hashtbl.find_multi t.inverted_index token
@@ -52,11 +51,11 @@ let lookup t ~query_tokens =
             | Some n -> n + 1)
         )
     );
-  (* Only keep candidates matching at least half the query tokens,
-     but always at least 1 *)
-  let min_matches = max 1 (num_query_tokens / 2) in
-  Hashtbl.fold counts ~init:[] ~f:(fun ~key:idx ~data:count acc ->
-    if count >= min_matches then (idx, count) :: acc else acc)
+  Hashtbl.fold counts ~init:(0, []) ~f:(fun ~key:idx ~data:count (best, acc) ->
+    if count > best then (count, [(idx, count)])
+    else if count = best then (best, (idx, count) :: acc)
+    else (best, acc))
+  |> snd
 
 (** Check if title type matches filter *)
 let matches_title_types ~title_types entry =
