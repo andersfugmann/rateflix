@@ -305,8 +305,17 @@ let build_title_extractor = function
     |> Option.map String.trim
     |> (function Some "" -> None | x -> x)
 
+(** Exclude filter specification for streaming service elements *)
+type exclude_filter =
+  [ `Attribute of string * string list  (** Exclude if attribute value matches any in list *)
+  | `Exists of string                   (** Exclude if CSS selector matches a child *)
+  | `Closest of string                  (** Exclude if CSS selector matches an ancestor *)
+  | `Page_title of string               (** Exclude if page title matches regex pattern *)
+  | `Function of (Dom_html.element Js.t -> bool) (** Custom predicate *)
+  ]
+
 (** Build exclude predicate from a single exclude spec *)
-let build_exclude_predicate = function
+let build_exclude_predicate : exclude_filter -> _ = function
   | `Function f -> fun elt -> f elt
   | `Attribute (attr, values) ->
     let attr = Js.string attr in
@@ -346,12 +355,12 @@ let find_title ~title_selector ~extract_title ~parse_title elt =
       | v -> v
     )
 
-let process ?(parent=0) ?transparent ?rating_selector ?title_selector ?transparency_selector ?exclude ?(filter=(fun (_, _) -> true)) ?z_index ?border_radius ?(parse_title=(fun t -> t, None)) ~selector ~title ~size =
+let process ?(parent=0) ?transparent ?rating_selector ?title_selector ?transparency_selector ?(exclude : exclude_filter list = []) ?(filter=(fun (_, _) -> true)) ?z_index ?border_radius ?(parse_title=(fun t -> t, None)) ~selector ~title ~size =
   let rating_selector = resolve_selector rating_selector in
   let transparency_selector = resolve_selector transparency_selector in
   let extract_title = build_title_extractor title in
   let title_selector = resolve_title_selector title_selector in
-  let exclude = build_excludes (Option.value ~default:[] exclude) in
+  let exclude = build_excludes exclude in
   let get_title = find_title ~title_selector ~extract_title ~parse_title in
   fun () ->
     Dom_html.document##querySelectorAll (Js.string selector)
