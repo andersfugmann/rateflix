@@ -59,6 +59,13 @@ let handle_request ~queue ~addr body =
          |> Option.some
      | Error _ -> None
 
+let cors_headers = Http.Header.of_list [
+  ("Content-Type", "application/json");
+  ("Access-Control-Allow-Origin", "*");
+  ("Access-Control-Allow-Methods", "POST, OPTIONS");
+  ("Access-Control-Allow-Headers", "Content-Type");
+]
+
 (** Create the callback function *)
 let make_callback ~queue =
   fun conn request body ->
@@ -66,14 +73,15 @@ let make_callback ~queue =
     let path = Http.Request.resource request in
     let addr = client_addr conn in
     match meth, path with
+    | `OPTIONS, "/lookup" ->
+        Cohttp_eio.Server.respond ~headers:cors_headers ~status:`No_content ~body:(Cohttp_eio.Body.of_string "") ()
     | `POST, "/lookup" ->
         let body_str = Eio.Buf_read.(of_flow ~max_size:10_000_000 body |> take_all) in
         (match handle_request ~queue ~addr body_str with
          | Some response_body ->
-             let headers = Http.Header.of_list [("Content-Type", "application/json")] in
-             Cohttp_eio.Server.respond ~headers ~status:`OK ~body:(Cohttp_eio.Body.of_string response_body) ()
+             Cohttp_eio.Server.respond ~headers:cors_headers ~status:`OK ~body:(Cohttp_eio.Body.of_string response_body) ()
          | None ->
-             Cohttp_eio.Server.respond ~status:`Bad_request ~body:(Cohttp_eio.Body.of_string "Invalid JSON request") ())
+             Cohttp_eio.Server.respond ~headers:cors_headers ~status:`Bad_request ~body:(Cohttp_eio.Body.of_string "Invalid JSON request") ())
     | _ ->
         Cohttp_eio.Server.respond ~status:`Not_found ~body:(Cohttp_eio.Body.of_string "Not found") ()
 
