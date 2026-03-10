@@ -193,7 +193,7 @@ let fetch_imdb_rating =
       end;
       result
     | None ->
-      let result = Omdb.fetch_imdb_rating ?year title in
+      let result = Backend.fetch_imdb_rating ?year title in
       Hashtbl.add in_progress ~key:(title, year) ~data:result;
       result
 
