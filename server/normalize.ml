@@ -91,12 +91,17 @@ let substitution_cost a b =
   | _ -> 1.0
 
 (** Weighted Levenshtein distance where case substitutions cost 0.1.
-    Uses two-row approach: fold over chars of s1, building each row functionally. *)
-let edit_distance ~cost s1 s2 =
+    Uses two-row approach: fold over chars of s1, building each row functionally.
+    If ~max_edits is provided, returns infinity when distance is known to exceed it. *)
+let edit_distance ~cost ?max_edits s1 s2 =
   let a = to_uchars s1 in
   let b = to_uchars s2 in
   let n = Array.length b in
   let init_row = Array.init (n + 1) Float.of_int in
+  let exceeds_max row = match max_edits with
+    | None -> false
+    | Some max -> Array.for_all (fun v -> v > max) row
+  in
   let next_row prev_row a_char =
     let _, rev_cells =
       Array.fold_left (fun (j, acc) b_char ->
@@ -111,10 +116,17 @@ let edit_distance ~cost s1 s2 =
     assert (n = List.length rev_cells - 1);
     Array.of_list (List.rev rev_cells)
   in
-  let final_row = Array.fold_left next_row init_row a in
-  final_row.(n)
+  let rec process row = function
+    | [] -> row.(n)
+    | a_char :: rest ->
+      let row = next_row row a_char in
+      if exceeds_max row then infinity
+      else process row rest
+  in
+  process init_row (Array.to_list a)
 
-let weighted_edit_distance = edit_distance ~cost:substitution_cost
+let weighted_edit_distance ?max_edits s1 s2 =
+  edit_distance ~cost:substitution_cost ?max_edits s1 s2
 
 (* Expect tests *)
 let%expect_test "normalize: Extended chars" =
@@ -217,3 +229,15 @@ let%expect_test "edit_distance: accent difference" =
 let%expect_test "edit_distance: case + accent" =
   Printf.printf "%.1f" (weighted_edit_distance "amelie" "Amélie");
   [%expect {| 1.1 |}]
+
+let%expect_test "edit_distance: max_edits short-circuit" =
+  Printf.printf "%.1f" (weighted_edit_distance ~max_edits:0.5 "cat" "bat");
+  [%expect {| inf |}]
+
+let%expect_test "edit_distance: max_edits allows case change" =
+  Printf.printf "%.1f" (weighted_edit_distance ~max_edits:0.5 "Cat" "cat");
+  [%expect {| 0.1 |}]
+
+let%expect_test "edit_distance: max_edits exact match" =
+  Printf.printf "%.1f" (weighted_edit_distance ~max_edits:0.0 "hello" "hello");
+  [%expect {| 0.0 |}]

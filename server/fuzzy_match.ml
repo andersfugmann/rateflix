@@ -105,15 +105,19 @@ let select_best ~norm_query ~query_year candidates =
                Bool.equal year_match first_year_match))
       in
       (* Among tied candidates, pick the one with lowest weighted edit distance,
-         considering both primary and secondary titles *)
-      tied
-      |> List.map ~f:(fun (entry, _, _, norm_primary, norm_secondary) ->
-          let dist_primary = Normalize.weighted_edit_distance norm_query norm_primary in
-          let dist_secondary = Normalize.weighted_edit_distance norm_query norm_secondary in
-          (entry, Float.min dist_primary dist_secondary))
-      |> List.min_elt ~compare:(fun (_, a_dist) (_, b_dist) ->
-          Float.compare a_dist b_dist)
-      |> Option.map ~f:(fun (entry, _dist) -> entry)
+         considering both primary and secondary titles.
+         Track best distance so far to short-circuit via max_edits. *)
+      let best =
+        List.fold_left tied ~init:None ~f:(fun acc (entry, _, _, norm_primary, norm_secondary) ->
+          let max_edits = Option.map acc ~f:snd in
+          let dist_primary = Normalize.weighted_edit_distance ?max_edits norm_query norm_primary in
+          let dist_secondary = Normalize.weighted_edit_distance ?max_edits norm_query norm_secondary in
+          let dist = Float.min dist_primary dist_secondary in
+          match acc with
+          | Some (_, best_dist) when Float.( >= ) dist best_dist -> acc
+          | _ -> Some (entry, dist))
+      in
+      Option.map best ~f:(fun (entry, _dist) -> entry)
 
 (** Search for best matching title *)
 let search t ~query ~year ~title_types =
