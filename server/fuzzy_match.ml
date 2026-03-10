@@ -17,14 +17,7 @@ type t = {
   inverted_index: (string, int array) Hashtbl.t;
   normalize: string -> string;
   tokenize: string -> string list;
-  counts: Bytes.t;
 }
-
-(** Minimum token length exempt from frequency filtering *)
-let min_stopword_length = 4
-
-(** Maximum fraction of titles a short token may appear in before being filtered *)
-let max_stopword_frequency = 0.02
 
 (** Build inverted index from title entries *)
 let build ~normalize ~tokenize titles =
@@ -46,19 +39,8 @@ let build ~normalize ~tokenize titles =
           Hashtbl.add_multi lists ~key:token ~data:idx
         )
     );
-  let num_titles = Array.length indexed_titles in
-  let threshold = Float.to_int (Float.of_int num_titles *. max_stopword_frequency) in
-  let filtered = ref 0 in
-  let inverted_index = Hashtbl.filter_mapi lists ~f:(fun ~key:token ~data:entries ->
-      if String.length token < min_stopword_length && List.length entries > threshold then
-        (Int.incr filtered; None)
-      else
-        Some (Array.of_list entries))
-  in
-  Stdlib.Printf.printf "Filtered %d stopword tokens (length < %d, frequency > %.0f%% = %d titles)\n%!"
-    !filtered min_stopword_length (max_stopword_frequency *. 100.0) threshold;
-  let counts = Bytes.make num_titles '\000' in
-  { titles = indexed_titles; inverted_index; normalize; tokenize; counts }
+  let inverted_index = Hashtbl.map lists ~f:Array.of_list in
+  { titles = indexed_titles; inverted_index; normalize; tokenize }
 
 (** Print histogram of token frequency distribution *)
 let print_token_histogram t =
@@ -89,7 +71,7 @@ let print_token_histogram t =
 (** Find candidate indices with match counts.
     Counts how many query tokens each candidate shares, then returns
     only candidates with the maximum match count in a single fold. *)
-let lookup t ~query_tokens =
+let _lookup3 t ~query_tokens =
   let counts = Bytes.create (Array.length t.titles) in
   let touched =
     List.fold ~init:[] query_tokens ~f:(fun acc token ->
@@ -116,8 +98,28 @@ let lookup t ~query_tokens =
   in
   (total, tied)
 
-let _lookup t ~query_tokens =
-  let counts = t.counts in
+let lookup t ~query_tokens =
+  let titles =
+    query_tokens
+    |> List.map ~f:(fun token ->
+        let count =
+          Hashtbl.find t.inverted_index token
+          |> Option.value_map ~f:Array.length ~default:0
+        in
+        token, count
+      )
+    |> List.sort ~compare:(fun (_, a) (_, b) -> Int.compare a b)
+    |> Fn.flip List.take ((List.length query_tokens)/2+1)
+    |> List.map ~f:fst
+    |> List.filter_map ~f:(fun token -> Hashtbl.find t.inverted_index token)
+    |> List.map ~f:(Set.of_array (module Int))
+    |> Set.union_list (module Int)
+    |> Set.to_list
+  in
+  List.length titles, titles
+
+let lookup_imperative t ~query_tokens =
+  let counts = Bytes.make (Array.length t.titles) '\000' in
   let touched = ref [] in
   List.iter query_tokens ~f:(fun token ->
       match Hashtbl.find t.inverted_index token with
@@ -140,6 +142,26 @@ let _lookup t ~query_tokens =
     );
   (total, !tied)
 
+let lookup_hashtbl t ~query_tokens =
+  let counts = Hashtbl.create ~size:1000 (module Int) in
+  List.iter query_tokens ~f:(fun token ->
+      match Hashtbl.find t.inverted_index token with
+      | None -> ()
+      | Some arr ->
+        Array.iter arr ~f:(fun idx ->
+            Hashtbl.update counts idx ~f:(function
+              | None -> 1
+              | Some n -> n + 1))
+    );
+  let total = Hashtbl.length counts in
+  let (_, tied) =
+    Hashtbl.fold counts ~init:(0, []) ~f:(fun ~key:idx ~data:count (best, acc) ->
+        if count > best then (count, [idx])
+        else if count = best then (best, idx :: acc)
+        else (best, acc))
+  in
+  (total, tied)
+
 (** Check if title type matches filter *)
 let matches_title_types ~title_types entry =
   match title_types with
@@ -159,6 +181,8 @@ type search_stats = {
   candidates: int;
   tied: int;
   lookup_ms: float;
+  lookup_imp_ms: float;
+  lookup_ht_ms: float;
   filter_ms: float;
   sort_ms: float;
   spelll_ms: float;
@@ -189,7 +213,8 @@ let select_best ~query_uchars ~query_year candidates =
           | None -> Some (entry, dist, year_match))
       in
       let stats = { candidates = num_candidates; tied = num_candidates;
-                    lookup_ms = 0.0; filter_ms = 0.0; sort_ms = 0.0;
+                    lookup_ms = 0.0; lookup_imp_ms = 0.0; lookup_ht_ms = 0.0;
+                    filter_ms = 0.0; sort_ms = 0.0;
                     spelll_ms = 0.0; ours_ms = 0.0 } in
       Option.map best ~f:(fun (entry, _dist, _) -> (entry, stats))
 
@@ -204,7 +229,11 @@ let search t ~query ~year ~title_types =
       let query_len = String.length norm_query in
       let t0 = Unix.gettimeofday () in
       let (total_candidates, raw) = lookup t ~query_tokens in
-      let t1 = Unix.gettimeofday () in
+      let t0b = Unix.gettimeofday () in
+      let _ = lookup_imperative t ~query_tokens in
+      let t0c = Unix.gettimeofday () in
+      let _ = lookup_hashtbl t ~query_tokens in
+      let t0d = Unix.gettimeofday () in
       let filtered =
         raw
         |> List.filter_map ~f:(fun idx ->
@@ -215,14 +244,14 @@ let search t ~query ~year ~title_types =
             else Some (entry, normalized_primary, normalized_secondary,
                        uchars_primary, uchars_secondary))
       in
-      let t2 = Unix.gettimeofday () in
+      let t1 = Unix.gettimeofday () in
       let candidates =
         filtered
         |> List.sort ~compare:(fun (_, p1, s1, _, _) (_, p2, s2, _, _) ->
             let len a b = Int.abs (String.length a - query_len) |> Int.min (Int.abs (String.length b - query_len)) in
             Int.compare (len p1 s1) (len p2 s2))
       in
-      let t3 = Unix.gettimeofday () in
+      let t2 = Unix.gettimeofday () in
       (* Benchmark: Spelll.edit_distance with upper bound *)
       let _spelll_best =
         List.fold_left candidates ~init:None ~f:(fun acc (entry, norm_primary, norm_secondary, _, _) ->
@@ -241,14 +270,14 @@ let search t ~query ~year ~title_types =
           | Some _ -> acc
           | None -> Some (entry, dist, year_match))
       in
-      let t4 = Unix.gettimeofday () in
+      let t3 = Unix.gettimeofday () in
       (* Our implementation *)
       let result =
         candidates
         |> List.map ~f:(fun (entry, _, _, up, us) -> (entry, up, us))
         |> select_best ~query_uchars ~query_year:year
       in
-      let t5 = Unix.gettimeofday () in
+      let t4 = Unix.gettimeofday () in
       let to_ms a b = (b -. a) *. 1000.0 in
       let num_tied = List.length candidates in
       result
@@ -256,8 +285,10 @@ let search t ~query ~year ~title_types =
           let score = calculate_score ~query ~title:entry.Imdb_data.primary_title in
           (entry, score, { candidates = total_candidates;
                            tied = num_tied;
-                           lookup_ms = to_ms t0 t1;
-                           filter_ms = to_ms t1 t2;
-                           sort_ms = to_ms t2 t3;
-                           spelll_ms = to_ms t3 t4;
-                           ours_ms = to_ms t4 t5 }))
+                           lookup_ms = to_ms t0 t0b;
+                           lookup_imp_ms = to_ms t0b t0c;
+                           lookup_ht_ms = to_ms t0c t0d;
+                           filter_ms = to_ms t0d t1;
+                           sort_ms = to_ms t1 t2;
+                           spelll_ms = to_ms t2 t3;
+                           ours_ms = to_ms t3 t4 }))
