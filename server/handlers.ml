@@ -6,7 +6,7 @@ type state = {
 
 (** Lookup a single query - pure function called by workers *)
 let lookup_one state (query : Types.query) : Types.search_result * Fuzzy_match.search_stats option =
-  match Fuzzy_match.search state.index ~query:query.title ~year:query.year ~title_types:query.title_types with
+  match Fuzzy_match.search state.index ?year:query.year ~title_types:query.title_types query.title with
   | None ->
       { Types.title = query.title;
         year = query.year;

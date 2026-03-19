@@ -25,11 +25,6 @@ server-release: ## Build the server binary (release mode)
 server-release:
 	@dune build --profile=release server/main.exe
 
-.PHONY: run-server
-run-server: ## Run the server with default data directory
-run-server: server
-	@$(SERVER_BIN) --data-dir $(DATA_DIR) $(ARGS)
-
 DATA_FILES=$(DATA_DIR)/title.basics.tsv $(DATA_DIR)/title.ratings.tsv
 
 .delete_on_error: $(DATA_DIR)/title.basics.tsv
@@ -41,6 +36,11 @@ $(DATA_DIR)/title.basics.tsv:
 $(DATA_DIR)/title.ratings.tsv:
 	@mkdir -p $(DATA_DIR)
 	@curl -o - $(IMDB_BASE_URL)/title.ratings.tsv.gz | gunzip > $@
+
+.PHONY: download
+download: ## Download fresh IMDB data files
+	@rm -f $(DATA_FILES) $(DATA_DIR)/index.cache
+	@$(MAKE) $(DATA_FILES)
 
 .PHONY: run
 run: server $(DATA_FILES) ## Run the server with default data directory

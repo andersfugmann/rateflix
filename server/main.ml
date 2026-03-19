@@ -1,7 +1,44 @@
 (** Main entry point for the IMDB rating lookup server *)
 
-(** Load IMDB data and build search index *)
-let load_data ~fs ~data_dir =
+let normalize = Normalize.normalize
+let tokenize = Normalize.tokenize
+
+let cache_path data_dir = Filename.concat data_dir "index.cache"
+
+let tsv_paths data_dir =
+  [ Filename.concat data_dir "title.basics.tsv";
+    Filename.concat data_dir "title.ratings.tsv" ]
+
+(** Check if cache is newer than all TSV source files *)
+let cache_is_fresh data_dir =
+  let cache = cache_path data_dir in
+  match Unix.stat cache with
+  | exception Unix.Unix_error _ -> false
+  | cache_stat ->
+    List.for_all (fun tsv ->
+      match Unix.stat tsv with
+      | exception Unix.Unix_error _ -> false
+      | tsv_stat -> cache_stat.Unix.st_mtime >= tsv_stat.Unix.st_mtime
+    ) (tsv_paths data_dir)
+
+(** Load index from marshal cache (unsafe) *)
+let load_cache data_dir =
+  let path = cache_path data_dir in
+  let ic = open_in_bin path in
+  let cache : Fuzzy_match.cache = Marshal.from_channel ic in
+  close_in ic;
+  let index = Fuzzy_match.of_cache ~normalize ~tokenize cache in
+  { Handlers.index }
+
+(** Save index to marshal cache *)
+let save_cache data_dir (state : Handlers.state) =
+  let path = cache_path data_dir in
+  let oc = open_out_bin path in
+  Marshal.to_channel oc (Fuzzy_match.to_cache state.index) [Marshal.No_sharing];
+  close_out oc
+
+(** Load IMDB data from TSV files and build search index *)
+let load_from_tsv ~fs ~data_dir =
   let titles =
     let filter = function
       | { Imdb_data.title_type = Types.(Short | VideoGame | TvEpisode); _ } -> false
@@ -9,14 +46,31 @@ let load_data ~fs ~data_dir =
     in
     Imdb_data.read ~filter Eio.Path.(fs / data_dir)
   in
-  let index = Fuzzy_match.build ~normalize:Normalize.normalize ~tokenize:Normalize.tokenize titles in
+  let index = Fuzzy_match.build ~normalize ~tokenize titles in
   { Handlers.index }
 
-(** Reload data on separate domain to avoid blocking requests *)
+(** Load IMDB data: try cache first, fall back to TSV *)
+let load_data ~fs ~data_dir =
+  if cache_is_fresh data_dir then begin
+    Printf.printf "Loading from cache %s...\n%!" (cache_path data_dir);
+    let state = load_cache data_dir in
+    Printf.printf "Cache loaded\n%!";
+    state
+  end else begin
+    let state = load_from_tsv ~fs ~data_dir in
+    Printf.printf "Saving cache to %s...\n%!" (cache_path data_dir);
+    save_cache data_dir state;
+    Printf.printf "Cache saved\n%!";
+    state
+  end
+
+(** Reload data on separate domain to avoid blocking requests.
+    Always reloads from TSV and rebuilds cache. *)
 let reload_data_async ~dm ~fs ~data_dir ~state_ref =
   Eio.Domain_manager.run dm (fun () ->
     Printf.printf "Reloading data from %s...\n%!" data_dir;
-    let new_state = load_data ~fs ~data_dir in
+    let new_state = load_from_tsv ~fs ~data_dir in
+    save_cache data_dir new_state;
     Atomic.set state_ref new_state;
     Printf.printf "Data reload complete\n%!")
 

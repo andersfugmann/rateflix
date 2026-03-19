@@ -1,0 +1,157 @@
+# Fuzzy search test cases
+# Format: query | expected_imdb_id [| year [| title_types [| description]]]
+# Lines starting with # are comments, blank lines are ignored.
+# Fields are pipe-delimited, with optional trailing fields.
+
+# --- Unicode Accented Characters ---
+Amélie | tt0211915 | 2001 | | French é accent
+Amelie | tt0211915 | 2001 | | Without accent (should match)
+Léon: The Professional | tt0110413 | 1994 | | French é with colon
+Leon The Professional | tt0110413 | 1994 | | Without accent or colon
+The City of Lost Children | tt0112682 | 1995 | | English title for French film
+
+# --- Case Insensitivity ---
+THE GODFATHER | tt0068646 | 1972 | | All uppercase
+the godfather | tt0068646 | 1972 | | All lowercase
+The Godfather | tt0068646 | 1972 | | Title case
+AMÉLIE | tt0211915 | 2001 | | Uppercase with accent
+amélie | tt0211915 | 2001 | | Lowercase with accent
+
+# --- International Unicode Titles ---
+Nausicaä of the Valley of the Wind | tt0087544 | 1984 | | Diaeresis
+Nausicaa of the Valley of the Wind | tt0087544 | 1984 | | Without diaeresis
+Hôtel Rwanda | tt0395169 | 2004 | | French ô
+Hotel Rwanda | tt0395169 | 2004 | | Without accent
+Koyaanisqatsi | tt0085809 | 1982 | | Hopi title no accents
+KOYAANISQATSI | tt0085809 | 1982 | | Uppercase variant
+
+# --- Punctuation Handling ---
+Who's Afraid of Virginia Woolf? | tt0061184 | 1966 | | Apostrophe and question mark
+Whos Afraid of Virginia Woolf | tt0061184 | 1966 | | Without punctuation
+Schindler's List | tt0108052 | 1993 | | Apostrophe in title
+Schindlers List | tt0108052 | 1993 | | Without apostrophe
+
+# --- Year Disambiguation ---
+Singin' in the Rain | tt0045152 | 1952 | | Classic 1952 musical
+Singin in the Rain | tt0045152 | 1952 | | Without apostrophe
+A Star Is Born | tt0029606 | 1937 | | 1937 original
+A Star Is Born | tt0047522 | 1954 | | 1954 Judy Garland version
+A Star Is Born | tt0075265 | 1976 | | 1976 Barbra Streisand version
+The Fly | tt0051622 | 1958 | | 1958 original
+The Fly | tt0091064 | 1986 | | 1986 Cronenberg remake
+Dune | tt0087182 | 1984 | | 1984 David Lynch version
+West Side Story | tt0055614 | 1961 | | 1961 original
+West Side Story | tt3581652 | 2021 | | 2021 Spielberg remake
+Little Women | tt0024264 | 1933 | | 1933 version
+Little Women | tt0110367 | 1994 | | 1994 Winona Ryder version
+Ocean's Eleven | tt0054135 | 1960 | | 1960 Rat Pack version
+Ocean's Eleven | tt0240772 | 2001 | | 2001 Clooney version
+
+# --- Title Type Filtering ---
+Breaking Bad | tt0903747 | | tvSeries | TV series without filter
+Fargo | tt0116282 | 1996 | movie | Fargo movie (1996)
+Fargo | tt2802850 | | tvSeries | Fargo TV series
+Dune: Part One | tt1160419 | 2021 | movie | Dune movie with type filter
+A Star Is Born | tt1517451 | 2018 | movie | A Star Is Born movie 2018
+Westworld | tt0475784 | | tvSeries | Westworld series vs movie
+True Grit | tt1403865 | 2010 | movie | True Grit movie remake
+True Grit | tt0065126 | 1969 | movie | True Grit original movie
+The Fly | tt0091064 | 1986 | movie | The Fly movie
+
+# --- Short Titles ---
+It | tt1396484 | 2017 | movie | It (2017 horror)
+Us | tt6857112 | 2019 | movie | Us (2019 horror)
+Up | tt1049413 | 2009 | movie | Up (2009 Pixar)
+Her | tt1798709 | 2013 | movie | Her (2013 Spike Jonze)
+Jaws | tt0073195 | 1975 | movie | Jaws (1975)
+M | tt0022100 | 1931 | movie | M (1931 Fritz Lang)
+
+# --- Star Wars Films ---
+Star Wars: A New Hope (Episode IV) | tt0076759 | 1977 | movie | SW Episode IV
+Star Wars: The Empire Strikes Back (Episode V) | tt0080684 | 1980 | movie | SW Episode V
+Star Wars: Return of the Jedi (Episode VI) | tt0086190 | 1983 | movie | SW Episode VI
+Star Wars: The Phantom Menace (Episode I) | tt0120915 | 1999 | movie | SW Episode I
+Star Wars: Attack of the Clones (Episode II) | tt0121765 | 2002 | movie | SW Episode II
+Star Wars: Revenge of the Sith (Episode III) | tt0121766 | 2005 | movie | SW Episode III
+Star Wars: The Force Awakens (Episode VII) | tt2488496 | 2015 | movie | SW Episode VII
+Star Wars: The Last Jedi (Episode VIII) | tt2527336 | 2017 | movie | SW Episode VIII
+Star Wars: The Rise of Skywalker (Episode IX) | tt2527338 | 2019 | movie | SW Episode IX
+Rogue One: A Star Wars Story | tt3748528 | 2016 | movie | Rogue One
+Solo: A Star Wars Story | tt3778644 | 2018 | movie | Solo
+
+# --- Star Wars TV Series ---
+The Mandalorian | tt8111088 | | tvSeries | The Mandalorian
+Andor | tt9253284 | | tvSeries | Andor
+Ahsoka | tt13622776 | | tvSeries | Ahsoka
+Star Wars: Skeleton Crew | tt20600980 | | tvSeries | Skeleton Crew
+Obi-Wan Kenobi | tt8466564 | | tvMiniSeries | Obi-Wan Kenobi
+Star Wars: Tales of the Jedi | tt20723374 | | tvMiniSeries | Tales of the Jedi
+Disney Gallery / Star Wars: The Mandalorian | tt12162902 | | | Disney Gallery
+
+# --- Marvel / Superhero ---
+Avengers: Age of Ultron | tt2395427 | 2015 | movie | Age of Ultron
+Avengers: Endgame | tt4154796 | 2019 | movie | Endgame
+Avengers: Infinity War | tt4154756 | 2018 | movie | Infinity War
+Marvel Studios' Avengers: Age of Ultron | tt2395427 | 2015 | | Prefixed Age of Ultron
+Marvel Studios' Avengers: Endgame | tt4154796 | 2019 | | Prefixed Endgame
+Marvel Studios' Avengers: Infinity War | tt4154756 | 2018 | | Prefixed Infinity War
+Captain America: Brave New World | tt14513804 | | movie | Cap Brave New World
+Captain Marvel | tt4154664 | 2019 | movie | Captain Marvel
+The Marvels | tt10676048 | 2023 | movie | The Marvels
+Black Panther: Wakanda Forever | tt9114286 | 2022 | movie | Wakanda Forever
+Doctor Strange | tt1211837 | 2016 | movie | Doctor Strange
+Doctor Strange in the Multiverse of Madness | tt9419884 | 2022 | movie | Multiverse of Madness
+Eternals | tt9032400 | 2021 | movie | Eternals
+Guardians of the Galaxy | tt2015381 | 2014 | movie | GotG original
+Guardians of the Galaxy Vol. 2 | tt3896198 | 2017 | movie | GotG Vol. 2
+Guardians of the Galaxy Vol. 3 | tt6791350 | 2023 | movie | GotG Vol. 3
+Iron Man 3 | tt1300854 | 2013 | movie | Iron Man 3
+Ant-Man and the Wasp: Quantumania | tt10954600 | 2023 | movie | Quantumania
+Shang-Chi and The Legend of The Ten Rings | tt9376612 | 2021 | movie | Shang-Chi
+Morbius | tt5108870 | 2022 | movie | Morbius
+Captain America: Civil War | tt3498820 | 2016 | movie | Civil War
+Deadpool 2 | tt5463162 | 2018 | movie | Deadpool 2
+Deadpool & Wolverine | tt6263850 | 2024 | movie | Deadpool & Wolverine
+Logan | tt3315342 | 2017 | movie | Logan
+X-Men: Days of Future Past | tt1877832 | 2014 | movie | Days of Future Past
+X-Men: First Class | tt1270798 | 2011 | movie | X-Men First Class
+Black Widow | tt3480822 | 2021 | movie | Black Widow MCU
+Daredevil | tt3322312 | 2015 | tvSeries | Daredevil series
+Daredevil: Born Again | tt18923754 | | tvSeries | Daredevil Born Again
+Loki | tt9140554 | | tvSeries | Loki
+WandaVision | tt9140560 | | tvMiniSeries | WandaVision
+Agents of S.H.I.E.L.D. | tt2364582 | | tvSeries | SHIELD
+
+# --- Action / Sci-Fi / Thriller ---
+Inglourious Basterds | tt0361748 | 2009 | movie | Inglourious Basterds
+Prometheus | tt1446714 | 2012 | movie | Prometheus
+Alien: Covenant | tt2316204 | 2017 | movie | Alien Covenant
+Alien: Earth | tt13623632 | | tvSeries | Alien Earth
+Kingsman: The Secret Service | tt2802144 | 2014 | movie | Kingsman 1
+Kingsman: The Golden Circle | tt4649466 | 2017 | movie | Kingsman 2
+The King's Man | tt6856242 | 2021 | movie | Kings Man prequel
+Indiana Jones and the Dial of Destiny | tt1462764 | 2023 | movie | Indiana Jones 5
+Ford v Ferrari | tt1950186 | 2019 | movie | Ford v Ferrari
+Independence Day: Resurgence | tt1628841 | 2016 | movie | ID4 Resurgence
+Tron: Ares | tt6604188 | 2025 | movie | Tron Ares
+Terminator: Dark Fate | tt6450804 | 2019 | movie | Terminator Dark Fate
+Prince of Persia: The Sands of Time | tt0473075 | 2010 | movie | Prince of Persia
+Kingdom of the Planet of the Apes | tt11389872 | 2024 | movie | Planet of the Apes
+Snow White & the Huntsman | tt1735898 | 2012 | movie | Snow White Huntsman
+The Huntsman: Winter's War | tt2381991 | 2016 | movie | Huntsman sequel
+The Equalizer 2 | tt3766354 | 2018 | movie | Equalizer 2
+Predator | tt0093773 | 1987 | movie | Predator original
+Predator: Badlands | tt31227572 | 2025 | movie | Predator Badlands
+Alita: Battle Angel | tt0437086 | 2019 | movie | Alita
+John Carter | tt0401729 | 2012 | movie | John Carter
+I, Robot | tt0343818 | 2004 | movie | I Robot
+Men in Black | tt0119654 | 1997 | movie | MIB original
+Starship Troopers | tt0120201 | 1997 | movie | Starship Troopers 1997
+
+# --- Classic / Drama ---
+Tombstone | tt0108358 | 1993 | movie | Tombstone
+Reservoir Dogs | tt0105236 | 1992 | movie | Reservoir Dogs
+The Thin Red Line | tt0120863 | 1998 | movie | Thin Red Line
+Kingdom of Heaven | tt0320661 | 2005 | movie | Kingdom of Heaven
+The Jungle Book | tt3040964 | 2016 | movie | Jungle Book 2016
+Shōgun | tt2788316 | 2024 | tvSeries | Shogun
