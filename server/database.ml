@@ -1,12 +1,10 @@
 (** Token-based matching using inverted index, with edit distance scoring *)
 open Base
 
-(** Indexed title with precomputed tokens and normalized strings *)
+(** Indexed title with precomputed merged token list *)
 type indexed_title = {
   entry: Imdb_data.title_entry;
   tokens: string list;
-  tokens_primary: string list;
-  tokens_secondary: string list;
 }
 
 type t = {
@@ -19,7 +17,11 @@ type t = {
 (** Marshallable subset of t (no function values).
     Base's Set and Hashtbl contain comparator functions, so we convert
     to plain association lists for marshalling. *)
+
+let cache_version = 2
+
 type cache = {
+  version: int;
   cached_titles: indexed_title array;
   cached_inverted_index: (string * int list) list;
 }
@@ -29,24 +31,39 @@ let to_cache t =
     Hashtbl.fold t.inverted_index ~init:[] ~f:(fun ~key ~data acc ->
       (key, Set.to_list data) :: acc)
   in
-  { cached_titles = t.titles; cached_inverted_index = index_list }
+  { version = cache_version;
+    cached_titles = t.titles;
+    cached_inverted_index = index_list }
 
 let of_cache ~normalize ~tokenize c =
+  if c.version <> cache_version then
+    failwith (Printf.sprintf "Cache version mismatch: expected %d, got %d"
+                cache_version c.version);
   let inverted_index = Hashtbl.create ~size:(List.length c.cached_inverted_index) (module String) in
   List.iter c.cached_inverted_index ~f:(fun (key, indices) ->
     Hashtbl.set inverted_index ~key ~data:(Set.of_list (module Int) indices));
   { titles = c.cached_titles; inverted_index; normalize; tokenize }
 
+let hashcons () =
+  let table = Hashtbl.create ~size:200_000 (module String) in
+  fun s ->
+    Hashtbl.find_or_add table s ~default:(fun () -> s)
+
 (** Build inverted index from title entries *)
 let build ~normalize ~tokenize titles =
+  let hashcons = hashcons () in
   let lists = Hashtbl.create ~size:100_000 (module String) in
+  (* Hash consing: identical token strings share a single heap allocation *)
   let indexed_titles = Array.map titles ~f:(fun entry ->
       let norm1 = normalize entry.Imdb_data.primary_title in
       let norm2 = normalize entry.Imdb_data.secondary_title in
       let tokens_primary = tokenize norm1 in
       let tokens_secondary = tokenize norm2 in
-      let tokens = List.dedup_and_sort ~compare:String.compare (tokens_primary @ tokens_secondary) in
-      { entry; tokens; tokens_primary; tokens_secondary; }
+      let tokens =
+        List.dedup_and_sort ~compare:String.compare (tokens_primary @ tokens_secondary)
+        |> List.map ~f:hashcons
+      in
+      { entry; tokens }
     )
   in
   Array.iteri indexed_titles ~f:(fun idx { tokens; _ } ->
@@ -110,10 +127,12 @@ type search_stats = {
   filtered: int;
 }
 
-let select_best ~query ~query_tokens candidates =
+let select_best ~normalize ~tokenize ~query ~query_tokens candidates =
   let score = jaccard_similarity query_tokens in
-  List.map candidates ~f:(fun { entry; tokens_primary; tokens_secondary; _ } ->
-      let jaccard = Float.max (score tokens_primary) (score tokens_secondary) in
+  List.map candidates ~f:(fun { entry; _ } ->
+      let tp = tokenize (normalize entry.Imdb_data.primary_title) in
+      let ts = tokenize (normalize entry.Imdb_data.secondary_title) in
+      let jaccard = Float.max (score tp) (score ts) in
       entry, jaccard
     )
   |> List.sort_and_group ~compare:(fun (_, m1) (_, m2) -> Float.compare m2 m1)
@@ -153,6 +172,6 @@ let search t ?year ~title_types query =
         Int.compare (len e1) (len e2))
   in
   let num_filtered = List.length candidates in
-  select_best ~query ~query_tokens candidates
+  select_best ~normalize:t.normalize ~tokenize:t.tokenize ~query ~query_tokens candidates
   |> Option.map ~f:(fun (entry, score) ->
       (entry, score, { candidates = total_candidates; filtered = num_filtered }))

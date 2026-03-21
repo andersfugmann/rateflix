@@ -3,7 +3,7 @@ open Base
 
 
 type title_entry = {
-  tconst: string;
+  tconst: int;
   title_type: Types.title_type;
   primary_title: string;
   secondary_title: string;
@@ -11,6 +11,11 @@ type title_entry = {
   rating: float;
   votes: int;
 }
+
+let parse_tconst s =
+  if String.length s > 2 && Char.equal (String.get s 0) 't' && Char.equal (String.get s 1) 't'
+  then Int.of_string_opt (String.drop_prefix s 2)
+  else None
 
 let parse_int field =
   match Int.of_string_opt field with
@@ -24,7 +29,7 @@ let parse_float field =
 
 (** Parse title.basics.tsv row *)
 type title_basics = {
-  b_tconst: string;
+  b_tconst: int;
   b_title_type: Types.title_type;
   b_primary_title: string;
   b_secondary_title: string;
@@ -33,20 +38,24 @@ type title_basics = {
 
 let parse_basics_row = function
   | b_tconst :: entry_type :: b_primary_title :: b_secondary_title :: _ :: start_year :: _ ->
-    Some { b_tconst; b_title_type = Types.title_type_of_string entry_type; b_primary_title; b_secondary_title; b_start_year = Int.of_string_opt start_year }
+    (match parse_tconst b_tconst with
+     | Some id -> Some { b_tconst = id; b_title_type = Types.title_type_of_string entry_type; b_primary_title; b_secondary_title; b_start_year = Int.of_string_opt start_year }
+     | None -> None)
   | l -> let s = String.concat ~sep:"; " l in Stdlib.Printf.printf "Could not parse [ %s ]\n" s; None
 (* raise (Types.Parse_error (Printf.sprintf "Invalid basics row with %d fields" (List.length row))) *)
 
 (** Parse title.ratings.tsv row *)
 type title_rating = {
-  r_tconst: string;
+  r_tconst: int;
   r_average_rating: float;
   r_num_votes: int;
 }
 
 let parse_rating_row = function
   | [r_tconst; rating; votes] ->
-      Some { r_tconst; r_average_rating = parse_float rating; r_num_votes = parse_int votes }
+      (match parse_tconst r_tconst with
+       | Some id -> Some { r_tconst = id; r_average_rating = parse_float rating; r_num_votes = parse_int votes }
+       | None -> None)
   | l -> let s = String.concat ~sep:"; " l in Stdlib.Printf.printf "Could not parse [ %s ]\n" s; None
 (* raise (Types.Parse_error (Printf.sprintf "Invalid rating row with %d fields" (List.length row))) *)
 
@@ -55,7 +64,7 @@ let read ~filter dir =
   let ratings_table =
     let ratings = Eio.Path.(dir / "title.ratings.tsv") in
     let parse_ratings : string Stdlib.Seq.t -> _ = fun seq ->
-      let tbl = Hashtbl.create (module String) in
+      let tbl = Hashtbl.create (module Int) in
       seq
       |> Stdlib.Seq.drop 1
       |> Stdlib.Seq.map String.strip

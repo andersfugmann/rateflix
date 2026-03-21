@@ -46,18 +46,25 @@ let load_from_tsv ~fs ~data_dir =
 
 (** Load IMDB data: try cache first, fall back to TSV *)
 let load_data ~fs ~data_dir =
-  if cache_is_fresh ~fs data_dir then begin
-    Printf.printf "Loading from cache %s...\n%!" (cache_path data_dir);
-    let state = load_cache ~fs data_dir in
-    Printf.printf "Cache loaded\n%!";
-    state
-  end else begin
+  let from_tsv () =
     let state = load_from_tsv ~fs ~data_dir in
     Printf.printf "Saving cache to %s...\n%!" (cache_path data_dir);
     save_cache ~fs data_dir state;
     Printf.printf "Cache saved\n%!";
     state
-  end
+  in
+  if cache_is_fresh ~fs data_dir then begin
+    Printf.printf "Loading from cache %s...\n%!" (cache_path data_dir);
+    match load_cache ~fs data_dir with
+    | state ->
+      Printf.printf "Cache loaded\n%!";
+      state
+    | exception exn ->
+      Printf.printf "Cache load failed (%s), rebuilding from TSV...\n%!"
+        (Printexc.to_string exn);
+      from_tsv ()
+  end else
+    from_tsv ()
 
 (** Download missing TSV files via HTTPS + gzip decompression.
     Returns true if all files are present afterwards. *)
