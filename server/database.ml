@@ -1,35 +1,27 @@
 (** Token-based matching using inverted index, with edit distance scoring *)
 open Base
 
-(** Indexed title with precomputed merged token list *)
-type indexed_title = {
-  entry: Imdb_data.title_entry;
-  tokens: string list;
-}
-
 type t = {
-  titles: indexed_title array;
-  inverted_index: (string, Set.M(Int).t) Hashtbl.t;
+  titles: Imdb_data.title_entry array;
+  inverted_index: (string, int array) Hashtbl.t;
   normalize: string -> string;
   tokenize: string -> string list;
 }
 
-(** Marshallable subset of t (no function values).
-    Base's Set and Hashtbl contain comparator functions, so we convert
-    to plain association lists for marshalling. *)
+(** Marshallable subset of t (no function values). *)
 
-let cache_version = 2
+let cache_version = 4
 
 type cache = {
   version: int;
-  cached_titles: indexed_title array;
-  cached_inverted_index: (string * int list) list;
+  cached_titles: Imdb_data.title_entry array;
+  cached_inverted_index: (string * int array) list;
 }
 
 let to_cache t =
   let index_list =
     Hashtbl.fold t.inverted_index ~init:[] ~f:(fun ~key ~data acc ->
-      (key, Set.to_list data) :: acc)
+      (key, data) :: acc)
   in
   { version = cache_version;
     cached_titles = t.titles;
@@ -40,55 +32,41 @@ let of_cache ~normalize ~tokenize c =
     failwith (Printf.sprintf "Cache version mismatch: expected %d, got %d"
                 cache_version c.version);
   let inverted_index = Hashtbl.create ~size:(List.length c.cached_inverted_index) (module String) in
-  List.iter c.cached_inverted_index ~f:(fun (key, indices) ->
-    Hashtbl.set inverted_index ~key ~data:(Set.of_list (module Int) indices));
+  List.iter c.cached_inverted_index ~f:(fun (key, data) ->
+    Hashtbl.set inverted_index ~key ~data);
   { titles = c.cached_titles; inverted_index; normalize; tokenize }
-
-let hashcons () =
-  let table = Hashtbl.create ~size:200_000 (module String) in
-  fun s ->
-    Hashtbl.find_or_add table s ~default:(fun () -> s)
 
 (** Build inverted index from title entries *)
 let build ~normalize ~tokenize titles =
-  let hashcons = hashcons () in
   let lists = Hashtbl.create ~size:100_000 (module String) in
-  (* Hash consing: identical token strings share a single heap allocation *)
-  let indexed_titles = Array.map titles ~f:(fun entry ->
+  Array.iteri titles ~f:(fun idx entry ->
       let norm1 = normalize entry.Imdb_data.primary_title in
       let norm2 = normalize entry.Imdb_data.secondary_title in
-      let tokens_primary = tokenize norm1 in
-      let tokens_secondary = tokenize norm2 in
       let tokens =
-        List.dedup_and_sort ~compare:String.compare (tokens_primary @ tokens_secondary)
-        |> List.map ~f:hashcons
+        List.dedup_and_sort ~compare:String.compare
+          (tokenize norm1 @ tokenize norm2)
       in
-      { entry; tokens }
-    )
-  in
-  Array.iteri indexed_titles ~f:(fun idx { tokens; _ } ->
       List.iter tokens ~f:(fun token ->
-          Hashtbl.add_multi lists ~key:token ~data:idx
-        )
+          Hashtbl.add_multi lists ~key:token ~data:idx)
     );
-  let inverted_index = Hashtbl.map lists ~f:(Set.of_list (module Int)) in
-  { titles = indexed_titles; inverted_index; normalize; tokenize }
+  let inverted_index = Hashtbl.map lists ~f:(fun indices ->
+      Array.of_list (List.dedup_and_sort ~compare:Int.compare indices))
+  in
+  { titles; inverted_index; normalize; tokenize }
 
 let lookup t ~query_tokens =
-  let titles =
-    query_tokens
-    |> List.dedup_and_sort ~compare:String.compare
-    |> List.filter_map ~f:(fun token ->
-        Hashtbl.find t.inverted_index token
-        |> Option.map ~f:Set.length
-        |> Option.map ~f:(fun count -> token, count)
-      )
-    |> List.sort ~compare:(fun (_, a) (_, b) -> Int.compare a b)
-    |> List.filter_mapi ~f:(fun i (t, c) -> match i > 0 && c > 10000 with true -> None | false -> Some t)
-    |> List.filter_map ~f:(fun token -> Hashtbl.find t.inverted_index token)
-    |> Set.union_list (module Int)
-  in
-  Set.length titles, Set.to_list titles
+  query_tokens
+  |> List.dedup_and_sort ~compare:String.compare
+  |> List.filter_map ~f:(fun token ->
+      Hashtbl.find t.inverted_index token
+      |> Option.map ~f:(fun arr -> token, Array.length arr)
+    )
+  |> List.sort ~compare:(fun (_, a) (_, b) -> Int.compare a b)
+  |> List.filter_mapi ~f:(fun i (t, c) -> match i > 0 && c > 10000 with true -> None | false -> Some t)
+  |> List.filter_map ~f:(fun token -> Hashtbl.find t.inverted_index token)
+  |> List.reduce ~f:(Array.merge ~compare:Int.compare)
+  |> Option.value ~default:[||]
+  |> fun v -> Array.length v, Array.to_list v
 
 (** Check if title type matches filter *)
 let matches_title_types ~title_types entry =
@@ -129,7 +107,7 @@ type search_stats = {
 
 let select_best ~normalize ~tokenize ~query ~query_tokens candidates =
   let score = jaccard_similarity query_tokens in
-  List.map candidates ~f:(fun { entry; _ } ->
+  List.map candidates ~f:(fun entry ->
       let tp = tokenize (normalize entry.Imdb_data.primary_title) in
       let ts = tokenize (normalize entry.Imdb_data.secondary_title) in
       let jaccard = Float.max (score tp) (score ts) in
@@ -154,18 +132,18 @@ let search t ?year ~title_types query =
   let candidates =
     candidates
     |> List.filter_map ~f:(fun idx ->
-        let { entry; _ } as item = t.titles.(idx) in
+        let entry = t.titles.(idx) in
         match matches_title_types ~title_types entry with
         | false -> None
-        | true -> Some item
+        | true -> Some entry
       )
     |> (fun v -> Option.value_map year ~default:v ~f:(fun year' ->
-        List.filter v ~f:(function
-            | { entry = { year = Some year; _ }; _ } -> year = year'
-            | _ -> false
+        List.filter v ~f:(fun entry -> match entry.Imdb_data.year with
+            | Some year -> year = year'
+            | None -> false
           )
       ))
-    |> List.sort ~compare:(fun { entry = e1; _ } { entry = e2; _ } ->
+    |> List.sort ~compare:(fun e1 e2 ->
         let len e = Int.min
             (Int.abs (String.length e.Imdb_data.primary_title - query_len))
             (Int.abs (String.length e.Imdb_data.secondary_title - query_len)) in

@@ -107,6 +107,7 @@ let download_and_reload ~sw ~env ~fs ~data_dir ~state_ref =
      let new_state = load_from_tsv ~fs ~data_dir in
      save_cache ~fs data_dir new_state;
      Atomic.set state_ref new_state;
+     Gc.compact ();
      Printf.printf "Reload complete\n%!"
    with exn ->
      Printf.printf "Download failed: %s, keeping existing data\n%!"
@@ -181,6 +182,7 @@ let main () =
   then (Printf.eprintf "Cannot proceed without data files\n%!"; exit 1);
   let initial_state = load_data ~fs ~data_dir:config.data_dir in
   let state_ref = Atomic.make initial_state in
+  Gc.compact ();
   Printf.printf "Data loaded, %d titles indexed\n%!" (Array.length initial_state.index.Database.titles);
 
   start_reload_monitor ~sw ~env ~fs ~data_dir:config.data_dir ~state_ref ~clock;
