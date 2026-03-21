@@ -1,6 +1,6 @@
 PLUGIN_DIR=plugin
 PLUGIN_BUILD_DIR=_build/default/plugin_build
-SERVER_BIN=_build/default/server/main.exe
+SERVER_BIN=_build/default/server/rateflix_server.exe
 DATA_DIR=data
 IMDB_BASE_URL=https://datasets.imdbws.com
 
@@ -18,12 +18,12 @@ build-release:
 .PHONY: server
 server: ## Build the server binary
 server:
-	@dune build server/main.exe
+	@dune build server/rateflix_server.exe
 
 .PHONY: server-release
 server-release: ## Build the server binary (release mode)
 server-release:
-	@dune build --profile=release server/main.exe
+	@dune build --profile=release server/rateflix_server.exe
 
 DATA_FILES=$(DATA_DIR)/title.basics.tsv $(DATA_DIR)/title.ratings.tsv
 
@@ -43,7 +43,7 @@ download: ## Download fresh IMDB data files
 	@$(MAKE) $(DATA_FILES)
 
 .PHONY: run
-run: server $(DATA_FILES) ## Run the server with default data directory
+run: server ## Run the server with default data directory
 run:
 	@$(SERVER_BIN) --data-dir $(DATA_DIR)
 

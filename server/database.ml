@@ -58,7 +58,6 @@ let build ~normalize ~tokenize titles =
   { titles = indexed_titles; inverted_index; normalize; tokenize }
 
 let lookup t ~query_tokens =
-  let _min_tokens = Int.max 1 ((List.length query_tokens) / 2) in
   let titles =
     query_tokens
     |> List.dedup_and_sort ~compare:String.compare
@@ -108,16 +107,14 @@ let calculate_item_score ~query { Imdb_data.primary_title; secondary_title; _ } 
 
 type search_stats = {
   candidates: int;
-  tied: int;
+  filtered: int;
 }
 
-let select_best ~query ~query_uchars:_ ~query_tokens candidates =
+let select_best ~query ~query_tokens candidates =
   let score = jaccard_similarity query_tokens in
-  List.concat_map candidates ~f:(fun { entry; tokens_primary; tokens_secondary; _ } ->
-      (* Still want to penalize secondary titles slightly *)
-      let primary_score = score tokens_primary in
-      let secondary_score = score tokens_secondary in
-      [ entry, primary_score; entry, secondary_score ]
+  List.map candidates ~f:(fun { entry; tokens_primary; tokens_secondary; _ } ->
+      let jaccard = Float.max (score tokens_primary) (score tokens_secondary) in
+      entry, jaccard
     )
   |> List.sort_and_group ~compare:(fun (_, m1) (_, m2) -> Float.compare m2 m1)
   |> List.hd
@@ -132,7 +129,6 @@ let select_best ~query ~query_uchars:_ ~query_tokens candidates =
 (** Search for best matching title *)
 let search t ?year ~title_types query =
   let norm_query = t.normalize query in
-  let query_uchars = Normalize.to_uchars query in
   let query_tokens = t.tokenize norm_query in
   let query_len = String.length query in
   let (total_candidates, candidates) = lookup t ~query_tokens in
@@ -156,7 +152,7 @@ let search t ?year ~title_types query =
             (Int.abs (String.length e.Imdb_data.secondary_title - query_len)) in
         Int.compare (len e1) (len e2))
   in
-  let num_tied = List.length candidates in
-  select_best ~query ~query_uchars ~query_tokens candidates
+  let num_filtered = List.length candidates in
+  select_best ~query ~query_tokens candidates
   |> Option.map ~f:(fun (entry, score) ->
-      (entry, score, { candidates = total_candidates; tied = num_tied }))
+      (entry, score, { candidates = total_candidates; filtered = num_filtered }))

@@ -8,12 +8,12 @@ type t = {
 let parse () =
   let port_term =
     let doc = "Port to listen on" in
-    Cmdliner.Arg.(value & opt int 8080 & info ["p"; "port"] ~docv:"PORT" ~doc)
+    Cmdliner.Arg.(value & opt int 1913 & info ["p"; "port"] ~docv:"PORT" ~doc)
   in
   
   let data_dir_term =
     let doc = "Directory containing IMDB data files" in
-    Cmdliner.Arg.(required & opt (some string) None & info ["d"; "data-dir"] ~docv:"DIR" ~doc)
+    Cmdliner.Arg.(value & opt string "." & info ["d"; "data-dir"] ~docv:"DIR" ~doc)
   in
   
   let run p d = { port = p; data_dir = d } in

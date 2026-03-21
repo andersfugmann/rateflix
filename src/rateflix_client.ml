@@ -26,7 +26,7 @@ type request = query_json list [@@deriving yojson]
 
 [@@@warning "+39"]
 
-let server_url = "http://127.0.0.1:8080"
+let server_url = "http://127.0.0.1:1913"
 
 (** Parse IMDb rating string to float option *)
 let parse_rating rating = if Float.equal rating 0.0 then None else Some rating

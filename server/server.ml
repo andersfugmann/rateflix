@@ -1,6 +1,6 @@
 (** HTTP server using Cohttp-eio *)
 
-type work_queue = (Types.query * (Types.search_result * Fuzzy_match.search_stats option) Eio.Promise.u) Eio.Stream.t
+type work_queue = (Types.query * (Types.search_result * Database.search_stats option) Eio.Promise.u) Eio.Stream.t
 
 (** Post queries to worker queue and await results *)
 let lookup ~queue (request : Types.request) =
@@ -33,8 +33,8 @@ let log_response addr elapsed_ms responses =
       | None -> ""
     in
     let stats_str = match stats with
-      | Some (s : Fuzzy_match.search_stats) ->
-        Printf.sprintf " [candidates: %d, tied: %d]" s.candidates s.tied
+      | Some (s : Database.search_stats) ->
+        Printf.sprintf " [candidates: %d, filtered: %d]" s.candidates s.filtered
       | None -> " [no match]"
     in
     Printf.printf "[%s] \"%s\"%s -> \"%s\"%s %.2f%s [%.1fms]\n%!"
@@ -76,7 +76,7 @@ let make_callback ~queue =
     | `OPTIONS, "/lookup" ->
         Cohttp_eio.Server.respond ~headers:cors_headers ~status:`No_content ~body:(Cohttp_eio.Body.of_string "") ()
     | `POST, "/lookup" ->
-        let body_str = Eio.Buf_read.(of_flow ~max_size:10_000_000 body |> take_all) in
+        let body_str = Eio.Buf_read.(of_flow ~max_size:1_000_000 body |> take_all) in
         (match handle_request ~queue ~addr body_str with
          | Some response_body ->
              Cohttp_eio.Server.respond ~headers:cors_headers ~status:`OK ~body:(Cohttp_eio.Body.of_string response_body) ()

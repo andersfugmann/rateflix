@@ -21,7 +21,7 @@ make run
 # Run fuzzy search tests against running server
 make test-server
 # Or run against custom URL:
-SERVER_URL=http://localhost:8080 ./test/test_fuzzy.sh
+SERVER_URL=http://localhost:1913 ./test/test_fuzzy.sh
 ```
 
 ## Architecture

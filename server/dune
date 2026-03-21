@@ -6,7 +6,7 @@
  (preprocess (pps ppx_expect)))
 
 (executable
- (name main)
+ (name rateflix_server)
  (public_name rateflix-server)
  (package rateflix-server)
  (modules :standard \ normalize)
@@ -20,7 +20,10 @@
    uucp
    yojson
    cmdliner
-   camlzip
+   tls-eio
+   ca-certs
+   mirage-crypto-rng.unix
+   decompress.gz
    base
  )
  (preprocess (pps ppx_deriving_yojson)))
