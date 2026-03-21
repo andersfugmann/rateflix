@@ -1,7 +1,5 @@
 (** Main entry point for the IMDB rating lookup server *)
 
-let normalize = Normalize.normalize
-let tokenize = Normalize.tokenize
 
 let tsv_filenames = ["title.basics.tsv"; "title.ratings.tsv"]
 
@@ -24,7 +22,7 @@ let cache_is_fresh ~fs data_dir =
 let load_cache ~fs data_dir =
   let data = Eio.Path.load Eio.Path.(fs / cache_path data_dir) in
   let cache : Database.cache = Marshal.from_string data 0 in
-  let index = Database.of_cache ~normalize ~tokenize cache in
+  let index = Database.of_cache cache in
   { Handlers.index }
 
 (** Save index to marshal cache *)
@@ -41,7 +39,7 @@ let load_from_tsv ~fs ~data_dir =
     in
     Imdb_data.read ~filter Eio.Path.(fs / data_dir)
   in
-  let index = Database.build ~normalize ~tokenize titles in
+  let index = Database.build titles in
   { Handlers.index }
 
 (** Load IMDB data: try cache first, fall back to TSV *)
@@ -123,8 +121,10 @@ let start_workers ~sw ~dm ~state_ref ~queue =
         let rec loop () =
           let (query, resolver) = Eio.Stream.take queue in
           let state = Atomic.get state_ref in
-          let result = Handlers.lookup_one state query in
-          Eio.Promise.resolve resolver result;
+          let t0 = Unix.gettimeofday () in
+          let (result, stats) = Handlers.lookup_one state query in
+          let elapsed_ms = (Unix.gettimeofday () -. t0) *. 1000.0 in
+          Eio.Promise.resolve resolver (result, stats, elapsed_ms);
           loop ()
         in
         loop ()
