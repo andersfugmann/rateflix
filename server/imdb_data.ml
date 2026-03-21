@@ -1,5 +1,6 @@
 (** IMDB TSV data loading and parsing *)
 open Base
+open Bin_prot.Std
 
 
 type title_entry = {
@@ -10,7 +11,7 @@ type title_entry = {
   year: int option;
   rating: float;
   votes: int;
-}
+} [@@deriving bin_io]
 
 let parse_tconst s =
   if String.length s > 2 && Char.equal (String.get s 0) 't' && Char.equal (String.get s 1) 't'
@@ -63,15 +64,15 @@ let parse_rating_row = function
 let read ~filter dir =
   let ratings_table =
     let ratings = Eio.Path.(dir / "title.ratings.tsv") in
-    let parse_ratings : string Stdlib.Seq.t -> _ = fun seq ->
+    let parse_ratings seq =
+      let seq = Sequence.of_seq seq in
       let tbl = Hashtbl.create (module Int) in
-      seq
-      |> Stdlib.Seq.drop 1
-      |> Stdlib.Seq.map String.strip
-      |> Stdlib.Seq.filter (fun s -> String.length s > 0)
-      |> Stdlib.Seq.map (String.split ~on:'\t')
-      |> Stdlib.Seq.filter_map parse_rating_row
-      |> Stdlib.Seq.iter (fun rating ->
+      Sequence.drop seq 1
+      |> Sequence.map ~f:String.strip
+      |> Sequence.filter ~f:(fun s -> String.length s > 0)
+      |> Sequence.map ~f:(String.split ~on:'\t')
+      |> Sequence.filter_map ~f:parse_rating_row
+      |> Sequence.iter ~f:(fun rating ->
           Hashtbl.set tbl ~key:rating.r_tconst ~data:rating);
       tbl
     in
@@ -79,31 +80,37 @@ let read ~filter dir =
   in
 
   let parse_basics seq =
+    let seq = Sequence.of_seq seq in
     let total_basics = ref 0 in
     let result =
-      seq
-      |> Stdlib.Seq.drop 1
-      |> Stdlib.Seq.map (String.split ~on:'\t')
-      |> Stdlib.Seq.filter_map parse_basics_row
-      |> Stdlib.Seq.map (fun basic -> Int.incr total_basics; basic)
-      |> Stdlib.Seq.filter_map (fun basic ->
+      Sequence.drop seq 1
+      |> Sequence.map ~f:(String.split ~on:'\t')
+      |> Sequence.filter_map ~f:parse_basics_row
+      |> Sequence.map ~f:(fun basic -> Int.incr total_basics; basic)
+      |> Sequence.filter_map ~f:(fun basic ->
           match Hashtbl.find ratings_table basic.b_tconst with
           | None -> None
           | Some rating -> Some (basic, rating)
         )
-      |> Stdlib.Seq.map (fun (basic, rating) ->
+      |> Sequence.map ~f:(fun (basic, rating) ->
+          let primary_title = basic.b_primary_title in
+          let secondary_title =
+            match String.equal primary_title basic.b_secondary_title with
+            | true -> primary_title
+            | false -> basic.b_secondary_title
+          in
           {
             tconst = basic.b_tconst;
             title_type = basic.b_title_type;
-            primary_title = basic.b_primary_title;
-            secondary_title = basic.b_secondary_title;
+            primary_title;
+            secondary_title;
             year = basic.b_start_year;
             rating = rating.r_average_rating;
             votes = rating.r_num_votes;
           }
         )
-      |> Stdlib.Seq.filter filter
-      |> Stdlib.Array.of_seq
+      |> Sequence.filter ~f:filter
+      |> Sequence.to_array
     in
     let with_ratings = Array.length result in
     Stdlib.Printf.printf "Skipped %d titles without ratings\n%!" (!total_basics - with_ratings);

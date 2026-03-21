@@ -25,11 +25,12 @@ let make_client ~sw ~env =
 let get ~client ~sw uri =
   let resp, body = Cohttp_eio.Client.get ~sw client uri in
   let code = Http.Status.to_int (Http.Response.status resp) in
-  if code >= 300 && code < 400 then
-    match Http.Header.get (Http.Response.headers resp) "location" with
-    | Some loc -> Cohttp_eio.Client.get ~sw client (Uri.of_string loc)
-    | None -> failwith "redirect with no Location header"
-  else (resp, body)
+  match code >= 300 && code < 400 with
+  | true ->
+    (match Http.Header.get (Http.Response.headers resp) "location" with
+     | Some loc -> Cohttp_eio.Client.get ~sw client (Uri.of_string loc)
+     | None -> failwith "redirect with no Location header")
+  | false -> (resp, body)
 
 (** Download a .tsv.gz from IMDB and decompress to [out_path].
     Streams data: HTTP body → gzip decompressor → file, with no
@@ -45,8 +46,9 @@ let fetch_tsv ~env:_ ~sw ~client ~out_path filename =
   let tmp_path = out_path ^ ".tmp" in
   let oc = open_out_bin tmp_path in
   let refill buf =
-    if !eof then 0
-    else
+    match !eof with
+    | true -> 0
+    | false ->
       let len =
         try Eio.Flow.single_read body cstruct
         with End_of_file -> eof := true; 0

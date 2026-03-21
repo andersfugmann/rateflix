@@ -18,17 +18,23 @@ let cache_is_fresh ~fs data_dir =
     ) (tsv_paths data_dir)
   with _ -> false
 
-(** Load index from marshal cache *)
+(** Load index from cache *)
 let load_cache ~fs data_dir =
   let data = Eio.Path.load Eio.Path.(fs / cache_path data_dir) in
-  let cache : Database.cache = Marshal.from_string data 0 in
-  let index = Database.of_cache cache in
+  let buf = Bin_prot.Common.create_buf (String.length data) in
+  Bin_prot.Common.blit_string_buf data buf ~len:(String.length data);
+  let index = Database.bin_read_t buf ~pos_ref:(ref 0) in
   { Handlers.index }
 
-(** Save index to marshal cache *)
+(** Save index to cache *)
 let save_cache ~fs data_dir (state : Handlers.state) =
-  let data = Marshal.to_string (Database.to_cache state.index) [Marshal.No_sharing] in
-  Eio.Path.save ~create:(`Or_truncate 0o644) Eio.Path.(fs / cache_path data_dir) data
+  let size = Database.bin_size_t state.index in
+  let buf = Bin_prot.Common.create_buf size in
+  let _end_pos = Database.bin_write_t buf ~pos:0 state.index in
+  let data = Bytes.create size in
+  Bin_prot.Common.blit_buf_bytes buf data ~len:size;
+  Eio.Path.save ~create:(`Or_truncate 0o644) Eio.Path.(fs / cache_path data_dir)
+    (Bytes.unsafe_to_string data)
 
 (** Load IMDB data from TSV files and build search index *)
 let load_from_tsv ~fs ~data_dir =
@@ -51,17 +57,18 @@ let load_data ~fs ~data_dir =
     Printf.printf "Cache saved\n%!";
     state
   in
-  if cache_is_fresh ~fs data_dir then begin
+  match cache_is_fresh ~fs data_dir with
+  | true ->
     Printf.printf "Loading from cache %s...\n%!" (cache_path data_dir);
-    match load_cache ~fs data_dir with
-    | state ->
-      Printf.printf "Cache loaded\n%!";
-      state
-    | exception exn ->
-      Printf.printf "Cache load failed (%s), rebuilding from TSV...\n%!"
-        (Printexc.to_string exn);
-      from_tsv ()
-  end else
+    (match load_cache ~fs data_dir with
+     | state ->
+       Printf.printf "Cache loaded\n%!";
+       state
+     | exception exn ->
+       Printf.printf "Cache load failed (%s), rebuilding from TSV...\n%!"
+         (Printexc.to_string exn);
+       from_tsv ())
+  | false ->
     from_tsv ()
 
 (** Download missing TSV files via HTTPS + gzip decompression.

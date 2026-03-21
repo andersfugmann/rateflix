@@ -85,9 +85,10 @@ let is_case_equivalent a b =
 
 (** Substitution cost: 0.0 for identical, 0.1 for case-only difference, 1.0 otherwise *)
 let substitution_cost a b =
-  if Uchar.equal a b then 0.0
-  else if is_case_equivalent a b then 0.1
-  else 1.0
+  match Uchar.equal a b with
+  | true -> 0.0
+  | false when is_case_equivalent a b -> 0.1
+  | false -> 1.0
 
 (** Weighted Levenshtein distance using two mutable arrays.
     If ~max_edits is provided, returns infinity when distance is known to exceed it.

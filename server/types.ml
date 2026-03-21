@@ -11,7 +11,7 @@ type title_type =
   | Short [@name "short"]
   | TvEpisode [@name "tvEpisode"]
   | Unknown [@name "unknown"]
-[@@deriving yojson]
+[@@deriving yojson, bin_io]
 
 (* We should find a deriver that can make this table *)
 let title_type_of_string = function

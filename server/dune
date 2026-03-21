@@ -25,5 +25,6 @@
    mirage-crypto-rng.unix
    decompress.gz
    base
+   bin_prot
  )
- (preprocess (pps ppx_deriving_yojson)))
+ (preprocess (pps ppx_deriving_yojson ppx_bin_prot)))
