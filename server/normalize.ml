@@ -78,7 +78,7 @@ let substitution_cost a b =
 (** Weighted Levenshtein distance using two mutable arrays.
     If ~max_edits is provided, returns infinity when distance is known to exceed it.
     Accepts pre-decoded uchar arrays to avoid repeated UTF-8 decoding. *)
-let edit_distance_uchars ~cost ?max_edits a b =
+let weighted_edit_distance_uchars ~cost ?max_edits a b =
   let m = Array.length a in
   let n = Array.length b in
   match max_edits with
@@ -106,10 +106,6 @@ let edit_distance_uchars ~cost ?max_edits a b =
       done;
       prev.(n)
     with Early_exit -> Float.infinity
-
-(** Edit distance from strings (decodes UTF-8 internally) *)
-let weighted_edit_distance_uchars ~cost ?max_edits s1 s2 =
-  edit_distance_uchars ~cost ?max_edits s1 s2
 
 let weighted_edit_distance ~cost ?max_edits s1 s2 =
   weighted_edit_distance_uchars ~cost ?max_edits (to_uchars s1) (to_uchars s2)
