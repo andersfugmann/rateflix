@@ -17,9 +17,10 @@ let find_token t token =
 let build titles =
   let lists = Hashtbl.create ~size:100_000 (module String) in
   Array.iteri titles ~f:(fun idx entry ->
+
       let tokens =
-        let t1 = Normalize.normalize entry.Imdb_data.primary_title |> Normalize.tokenize in
-        let t2 = Normalize.normalize entry.Imdb_data.secondary_title |> Normalize.tokenize in
+        let t1 = Normalize.normalize entry.Imdb_data.primary_title in
+        let t2 = Normalize.normalize entry.Imdb_data.secondary_title in
         List.dedup_and_sort ~compare:String.compare (t1 @ t2)
       in
       List.iter tokens ~f:(fun token ->
@@ -41,7 +42,14 @@ let lookup t ~query_tokens =
       |> Option.map ~f:(fun arr -> token, Array.length arr)
     )
   |> List.sort ~compare:(fun (_, a) (_, b) -> Int.compare a b)
-  |> List.filter_mapi ~f:(fun i (t, c) -> match i > 0 && c > 10000 with true -> None | false -> Some t)
+  |> List.drop_while ~f:(function | (_, 0) -> true | _ -> false)
+  |> List.filteri ~f:(fun i (_, c) -> i < 1 || c < 10000)
+  |> List.map ~f:fst
+  |> (fun t ->
+      match List.exists query_tokens ~f:(String.Caseless.equal "m") || true  with
+      | true -> Stdlib.Printf.printf "Query: [%s]: [%s]\n" (String.concat ~sep:"; " query_tokens)(String.concat ~sep:"; " t); t
+      | false -> t
+    )
   |> List.filter_map ~f:(fun token -> find_token t token)
   |> List.reduce ~f:(Array.merge ~compare:Int.compare)
   |> Option.value_map ~default:[] ~f:Array.to_list
@@ -109,7 +117,7 @@ let select_best ~query ~query_tokens candidates =
         (secondary_title, entry) :: res
     )
   |> List.map ~f:(fun (title, entry) ->
-      let tokens = Normalize.tokenize (Normalize.normalize title) in
+      let tokens = Normalize.normalize title in
       (score tokens, title, entry)
     )
   |> List.sort_and_group ~compare:(fun (m1, _, _) (m2, _, _) -> Float.compare m2 m1)
@@ -142,10 +150,10 @@ let select_best ~query ~query_tokens candidates =
 
 (** Search for best matching title *)
 let search t ?year ~title_types query =
-  let norm_query = Normalize.normalize query in
   let query_tokens =
-    Normalize.tokenize norm_query
-    |> List.dedup_and_sort ~compare:String.compare in
+    Normalize.normalize query
+    |> List.dedup_and_sort ~compare:String.compare
+  in
   let candidates = lookup t ~query_tokens in
   let total_candidates = List.length candidates in
   let candidates =

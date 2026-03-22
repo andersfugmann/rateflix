@@ -8,49 +8,23 @@ let roman_to_arabic = function
   | "VII" -> Some "7" | "VIII" -> Some "8" | "IX" -> Some "9"
   | "X" -> Some "10" | _ -> None
 
-(** Split a NFKD-decomposed string into words on Unicode space separators (Zs). *)
+(** Split a NFKD-decomposed string into a sequence of words,
+    where each word is a Uchar.t list. Only letters and digits
+    are kept; spaces act as word separators; all other characters are dropped. *)
 let split_words s =
   let decoder = Uutf.decoder ~encoding:`UTF_8 (`String s) in
-  let buf = Buffer.create 64 in
-  let rec collect acc =
-    match Uutf.decode decoder with
-    | `Uchar u ->
-      begin match Uucp.Gc.general_category u with
-      | `Zs ->
-        let word = Buffer.contents buf in
-        Buffer.clear buf;
-        collect (match word with "" -> acc | _ -> word :: acc)
-      | _ ->
-        Uutf.Buffer.add_utf_8 buf u;
-        collect acc
-      end
-    | `End ->
-      let word = Buffer.contents buf in
-      List.rev (match word with "" -> acc | _ -> word :: acc)
-    | `Malformed _ -> collect acc
-    | `Await -> List.rev acc
-  in
-  collect []
-
-(** Reduce a word to lowercase ASCII letters and digits only *)
-let to_ascii word =
-  let decoder = Uutf.decoder ~encoding:`UTF_8 (`String word) in
-  let char_sequence =
+  let space = Uchar.of_char ' ' in
+  let chars =
     let open Sequence.Generator in
     let (let*) = (>>=) in
     let rec inner () =
       match Uutf.decode decoder with
       | `Uchar u ->
         begin match Uucp.Gc.general_category u with
-        | `Ll | `Lu | `Nd ->
-          let code = Uchar.to_scalar u in
-          let* () = match code with
-            | c when c >= 0x41 && c <= 0x5A -> yield (Char.lowercase (Char.of_int_exn c))
-            | c when c >= 0x61 && c <= 0x7A -> yield (Char.of_int_exn c)
-            | c when c >= 0x30 && c <= 0x39 -> yield (Char.of_int_exn c)
-            | _ -> return ()
-          in
-          inner ()
+        | `Lu | `Ll | `Lt | `Lm | `Lo | `Nd ->
+          let* () = yield u in inner ()
+        | `Zs ->
+          let* () = yield space in inner ()
         | _ -> inner ()
         end
       | `End -> return ()
@@ -59,20 +33,39 @@ let to_ascii word =
     in
     run (inner ())
   in
-  String.of_sequence char_sequence
+  chars
+  |> Sequence.group ~break:(fun a b -> Uchar.equal a space || Uchar.equal b space)
+  |> Sequence.filter ~f:(function | [ a ] -> not (Uchar.equal a space) | _ -> true)
+
+(** Convert a Uchar.t list to a UTF-8 string *)
+let uchars_to_utf8 uchars =
+  let buf = Buffer.create 16 in
+  List.iter uchars ~f:(Uutf.Buffer.add_utf_8 buf);
+  Buffer.contents buf
+
+let uchar_to_ascii c =
+  match Uchar.to_scalar c with
+  | c when (c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A) || (c >= 0x30 && c <= 0x39) -> Some (Char.of_int_exn c)
+  | _ -> None
 
 (** Full normalization pipeline: NFKD → split on Zs → replace roman numerals → ASCII lowercase *)
 let normalize s =
   let decomposed = Uunf_string.normalize_utf_8 `NFKD s in
   split_words decomposed
-  |> List.filter_map ~f:(fun word ->
-      let word = match roman_to_arabic word with
-        | Some arabic -> arabic
-        | None -> word
-      in
-      let ascii = to_ascii word in
-      match ascii with "" -> None | _ -> Some ascii)
-  |> String.concat ~sep:" "
+  |> Sequence.filter_map ~f:(fun word_uchars ->
+      word_uchars
+      |> List.filter_map ~f:uchar_to_ascii
+      |> String.of_char_list
+      |> (fun word ->
+          match roman_to_arabic word with
+          | Some arabic -> arabic
+          | None -> word
+        )
+      |> function
+      | "" -> None
+      | word -> Some (String.lowercase word)
+    )
+  |> Sequence.to_list
 
 (** Tokenize a normalized string into words *)
 let tokenize s =
@@ -144,39 +137,39 @@ let weighted_edit_distance ~cost ?max_edits s1 s2 =
 
 (* Expect tests *)
 let%expect_test "normalize: Extended chars" =
-  print_endline (normalize "æøå€$");
+  print_endline (normalize "æøå€$" |> String.concat ~sep:" ");
   [%expect {| a |}]
 
 let%expect_test "normalize: uppercase" =
-  print_endline (normalize "THE GODFATHER");
+  print_endline (normalize "THE GODFATHER" |> String.concat ~sep:" ");
   [%expect {| the godfather |}]
 
 let%expect_test "normalize: accented characters" =
-  print_endline (normalize "Amélie");
+  print_endline (normalize "Amélie" |> String.concat ~sep:" ");
   [%expect {| amelie |}]
 
 let%expect_test "normalize: multiple accents" =
-  print_endline (normalize "Léon: The Professional");
+  print_endline (normalize "Léon: The Professional" |> String.concat ~sep:" ");
   [%expect {| leon the professional |}]
 
 let%expect_test "normalize: diaeresis" =
-  print_endline (normalize "Nausicaä");
+  print_endline (normalize "Nausicaä" |> String.concat ~sep:" ");
   [%expect {| nausicaa |}]
 
 let%expect_test "normalize: circumflex" =
-  print_endline (normalize "Hôtel Rwanda");
+  print_endline (normalize "Hôtel Rwanda" |> String.concat ~sep:" ");
   [%expect {| hotel rwanda |}]
 
 let%expect_test "normalize: punctuation removed" =
-  print_endline (normalize "Who's Afraid of Virginia Woolf?");
+  print_endline (normalize "Who's Afraid of Virginia Woolf?" |> String.concat ~sep:" ");
   [%expect {| whos afraid of virginia woolf |}]
 
 let%expect_test "normalize: apostrophe in name" =
-  print_endline (normalize "Schindler's List");
+  print_endline (normalize "Schindler's List" |> String.concat ~sep:" ");
   [%expect {| schindlers list |}]
 
 let%expect_test "normalize: numbers kept" =
-  print_endline (normalize "2001: A Space Odyssey");
+  print_endline (normalize "2001: A Space Odyssey" |> String.concat ~sep:" ");
   [%expect {| 2001 a space odyssey |}]
 
 let%expect_test "tokenize: basic" =
@@ -197,7 +190,7 @@ let%expect_test "tokenize: empty string" =
 
 let%expect_test "normalize: Greek letters (non-ASCII)" =
   (* Greek 'Ω' (U+03A9) lowercases to 'ω' (U+03C9) which is > 255 *)
-  print_endline (normalize "Ωmega");
+  print_endline (normalize "Ωmega" |> String.concat ~sep:" ");
   [%expect {| mega |}]
 
 let%expect_test "edit_distance: identical strings" =
@@ -241,17 +234,17 @@ let%expect_test "edit_distance: max_edits exact match" =
   [%expect {| 0.0 |}]
 
 let%expect_test "normalize: roman numeral Ⅲ (unicode)" =
-  print_endline (normalize "Movie Ⅲ");
+  print_endline (normalize "Movie Ⅲ" |> String.concat ~sep:" ");
   [%expect {| movie 3 |}]
 
 let%expect_test "normalize: uppercase roman III" =
-  print_endline (normalize "Frozen III");
+  print_endline (normalize "Frozen III" |> String.concat ~sep:" ");
   [%expect {| frozen 3 |}]
 
 let%expect_test "normalize: lowercase roman iii not replaced" =
-  print_endline (normalize "frozen iii");
+  print_endline (normalize "frozen iii" |> String.concat ~sep:" ");
   [%expect {| frozen iii |}]
 
 let%expect_test "normalize: roman IV in context" =
-  print_endline (normalize "Star Wars Episode IV");
+  print_endline (normalize "Star Wars Episode IV" |> String.concat ~sep:" ");
   [%expect {| star wars episode 4 |}]
