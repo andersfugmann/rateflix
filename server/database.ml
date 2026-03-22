@@ -78,7 +78,7 @@ let jaccard_similarity xs =
 (** Calculate normalized score: 1.0 = perfect match, 0.0 = completely different.
     Case differences cost 0.1 per char, other edits cost 1.0. *)
 let calculate_score ?max_edits ~query title =
-  let distance = Normalize.weighted_edit_distance ?max_edits query title in
+  let distance = Normalize.weighted_edit_distance ~cost:Normalize.substitution_cost ?max_edits query title in
   distance
 
 let calculate_item_score ~query ?max_edits { Imdb_data.primary_title; secondary_title; _ } =
@@ -95,8 +95,17 @@ let select_best ~query ~query_tokens candidates =
   let score = jaccard_similarity query_tokens in
   let weighted_edit_distance =
     let query_uchars = Normalize.to_uchars query in
+    let to_base_char =
+      let cache = Hashtbl.create (module Uchar) in
+      fun uc -> Hashtbl.update_and_return cache uc ~f:(function
+          | Some v -> v
+          | None ->
+            Normalize.uchar_to_base_char uc
+        )
+    in
+    let cost = Normalize.substitution_cost ~to_base_char in
     fun ?max_edits s ->
-      Normalize.weighted_edit_distance_uchars ?max_edits query_uchars (Normalize.to_uchars s)
+      Normalize.weighted_edit_distance_uchars ~cost ?max_edits query_uchars (Normalize.to_uchars s)
   in
   (* We need to split up into primary and secondary *)
   candidates

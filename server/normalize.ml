@@ -1,31 +1,11 @@
 open Base
 open Stdio
-(** Unicode title normalization and tokenization for matching *)
-
-(** Case fold a UTF-8 string using Unicode case folding *)
-let case_fold title =
-  let decoder = Uutf.decoder ~encoding:`UTF_8 (`String title) in
-  let buf = Buffer.create (String.length title) in
-  let rec inner () =
-    match Uutf.decode decoder with
-    | `Uchar u ->
-        (match Uucp.Case.Fold.fold u with
-         | `Self -> Uutf.Buffer.add_utf_8 buf u
-         | `Uchars cs -> List.iter ~f:(Uutf.Buffer.add_utf_8 buf) cs);
-        inner ()
-    | `End -> Buffer.contents buf
-    | `Malformed _ -> inner ()
-    | `Await -> Buffer.contents buf
-  in
-  inner ()
 
 (** Normalize title to lowercase ASCII, keeping only letters, digits and spaces *)
-let normalize title =
+let normalize s =
   (* NFD decomposition separates base chars from combining diacritics *)
-  let decomposed = Uunf_string.normalize_utf_8 `NFD title in
+  let decomposed = Uunf_string.normalize_utf_8 `NFD s in
   let decoder = Uutf.decoder ~encoding:`UTF_8 (`String decomposed) in
-  (* This is a generator. We want to generate a sequence. *)
-
   (* Create a sequence of chars *)
   let char_sequence =
     let open Sequence.Generator in
@@ -40,15 +20,11 @@ let normalize title =
             inner ()
           | `Ll | `Lu | `Nd ->
             let code = Uchar.to_scalar u in
-            let ch = match code with
-              | c when c >= 0x41 && c <= 0x5A -> Some (Char.lowercase (Char.of_int_exn c))
-              | c when c >= 0x61 && c <= 0x7A -> Some (Char.of_int_exn c)
-              | c when c >= 0x30 && c <= 0x39 -> Some (Char.of_int_exn c)
-              | _ -> None
-            in
-            let* () = match ch with
-              | Some c -> yield c
-              | None -> return ()
+            let* () = match code with
+              | c when c >= 0x41 && c <= 0x5A -> yield (Char.lowercase (Char.of_int_exn c))
+              | c when c >= 0x61 && c <= 0x7A -> yield (Char.of_int_exn c)
+              | c when c >= 0x30 && c <= 0x39 -> yield (Char.of_int_exn c)
+              | _ -> return ()
             in
             inner ()
           | _ ->
@@ -70,7 +46,8 @@ let tokenize s =
 
 (** Decode a UTF-8 string into an array of unicode codepoints *)
 let to_uchars s =
-  let decoder = Uutf.decoder ~encoding:`UTF_8 (`String s) in
+  let decomposed = Uunf_string.normalize_utf_8 `NFD s in
+  let decoder = Uutf.decoder ~encoding:`UTF_8 (`String decomposed) in
   let rec collect acc =
     match Uutf.decode decoder with
     | `Uchar u -> collect (u :: acc)
@@ -80,21 +57,26 @@ let to_uchars s =
   in
   collect []
 
-(** Case fold a single uchar for comparison *)
-let case_fold_uchar u =
-  match Uucp.Case.Fold.fold u with
-  | `Self -> [u]
-  | `Uchars cs -> cs
+let uchar_to_base_char u =
+  let nfd = Uunf.create `NFD in
+  ignore (Uunf.add nfd (`Uchar u));
+  match Uunf.add nfd `End with
+  | `Uchar base -> Uchar.to_char base
+  | `Await | `End -> Uchar.to_char u
 
-(** Check if two uchars are case-equivalent *)
-let equal_caseless a b =
-  List.equal Uchar.equal (case_fold_uchar a) (case_fold_uchar b)
+let equal_caseless ?(to_base_char=uchar_to_base_char) a b =
+  match to_base_char a with
+  | None -> false
+  | Some a ->
+    match to_base_char b with
+    | None -> false
+    | Some b -> Char.Caseless.equal a b
 
 (** Substitution cost: 0.0 for identical, 0.1 for case-only difference, 1.0 otherwise *)
-let substitution_cost a b =
+let substitution_cost ?to_base_char a b =
   match Uchar.equal a b with
   | true -> 0.0
-  | false when equal_caseless a b -> 0.1
+  | false when equal_caseless ?to_base_char a b -> 0.1
   | false -> 1.0
 
 (** Weighted Levenshtein distance using two mutable arrays.
@@ -130,16 +112,11 @@ let edit_distance_uchars ~cost ?max_edits a b =
     with Early_exit -> Float.infinity
 
 (** Edit distance from strings (decodes UTF-8 internally) *)
-let edit_distance ~cost ?max_edits s1 s2 =
-  edit_distance_uchars ~cost ?max_edits (to_uchars s1) (to_uchars s2)
+let weighted_edit_distance_uchars ~cost ?max_edits s1 s2 =
+  edit_distance_uchars ~cost ?max_edits s1 s2
 
-(** Weighted edit distance from pre-decoded uchar arrays *)
-let weighted_edit_distance_uchars ?max_edits a b =
-  edit_distance_uchars ~cost:substitution_cost ?max_edits a b
-
-(** Weighted edit distance from strings *)
-let weighted_edit_distance ?max_edits s1 s2 =
-  edit_distance ~cost:substitution_cost ?max_edits s1 s2
+let weighted_edit_distance ~cost ?max_edits s1 s2 =
+  weighted_edit_distance_uchars ~cost ?max_edits (to_uchars s1) (to_uchars s2)
 
 (* Expect tests *)
 let%expect_test "normalize: Extended chars" =
@@ -194,63 +171,54 @@ let%expect_test "tokenize: empty string" =
   tokenize "" |> String.concat ~sep:", " |> print_endline;
   [%expect {| |}]
 
-let%expect_test "case_fold: uppercase" =
-  print_endline (case_fold "THE GODFATHER");
-  [%expect {| the godfather |}]
-
-let%expect_test "case_fold: preserves accents" =
-  print_endline (case_fold "Amélie");
-  [%expect {| amélie |}]
-
-let%expect_test "case_fold: preserves punctuation" =
-  print_endline (case_fold "Schindler's List");
-  [%expect {| schindler's list |}]
-
-let%expect_test "case_fold: german sharp s" =
-  print_endline (case_fold "STRASSE");
-  [%expect {| strasse |}]
-
 let%expect_test "normalize: Greek letters (non-ASCII)" =
   (* Greek 'Ω' (U+03A9) lowercases to 'ω' (U+03C9) which is > 255 *)
   print_endline (normalize "Ωmega");
   [%expect {| mega |}]
 
 let%expect_test "edit_distance: identical strings" =
-  printf "%.1f" (weighted_edit_distance "hello" "hello");
+  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost "hello" "hello");
   [%expect {| 0.0 |}]
 
 let%expect_test "edit_distance: case only" =
-  printf "%.1f" (weighted_edit_distance "Hello" "hello");
+  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost "Hello" "hello");
   [%expect {| 0.1 |}]
 
 let%expect_test "edit_distance: all caps" =
-  printf "%.1f" (weighted_edit_distance "THE" "the");
+  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost "THE" "the");
   [%expect {| 0.3 |}]
 
 let%expect_test "edit_distance: one char substitution" =
-  printf "%.1f" (weighted_edit_distance "cat" "bat");
+  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost "cat" "bat");
   [%expect {| 1.0 |}]
 
 let%expect_test "edit_distance: insertion" =
-  printf "%.1f" (weighted_edit_distance "helo" "hello");
+  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost "helo" "hello");
   [%expect {| 1.0 |}]
 
 let%expect_test "edit_distance: accent difference" =
-  printf "%.1f" (weighted_edit_distance "Amelie" "Amélie");
+  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost "Amelie" "Amélie");
   [%expect {| 1.0 |}]
 
 let%expect_test "edit_distance: case + accent" =
-  printf "%.1f" (weighted_edit_distance "amelie" "Amélie");
+  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost "amelie" "Amélie");
   [%expect {| 1.1 |}]
 
 let%expect_test "edit_distance: max_edits short-circuit" =
-  printf "%.1f" (weighted_edit_distance ~max_edits:0.5 "cat" "bat");
+  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost ~max_edits:0.5 "cat" "bat");
   [%expect {| inf |}]
 
 let%expect_test "edit_distance: max_edits allows case change" =
-  printf "%.1f" (weighted_edit_distance ~max_edits:0.5 "Cat" "cat");
+  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost ~max_edits:0.5 "Cat" "cat");
   [%expect {| 0.1 |}]
 
 let%expect_test "edit_distance: max_edits exact match" =
-  printf "%.1f" (weighted_edit_distance ~max_edits:0.0 "hello" "hello");
+  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost ~max_edits:0.0 "hello" "hello");
   [%expect {| 0.0 |}]
+
+let%expect_test "uchar_to_base_char: macron o" =
+  let u = Uchar.of_scalar_exn 0x014D in (* ō *)
+  (match uchar_to_base_char u with
+   | Some c -> printf "%c" c
+   | None -> printf "None");
+  [%expect {| o |}]
