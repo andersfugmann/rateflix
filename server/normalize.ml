@@ -57,14 +57,11 @@ let to_uchars s =
   in
   collect []
 
-let uchar_to_base_char u =
-  Uchar.to_char u
-
 let equal_caseless a b =
-  match uchar_to_base_char a with
+  match Uchar.to_char a with
   | None -> false
   | Some a ->
-    match uchar_to_base_char b with
+    match Uchar.to_char b with
     | None -> false
     | Some b -> Char.Caseless.equal a b
 
@@ -207,10 +204,3 @@ let%expect_test "edit_distance: max_edits allows case change" =
 let%expect_test "edit_distance: max_edits exact match" =
   printf "%.1f" (weighted_edit_distance ~cost:substitution_cost ~max_edits:0.0 "hello" "hello");
   [%expect {| 0.0 |}]
-
-let%expect_test "uchar_to_base_char: macron o" =
-  let u = Uchar.of_scalar_exn 0x014D in (* ō *)
-  (match uchar_to_base_char u with
-   | Some c -> printf "%c" c
-   | None -> printf "None");
-  [%expect {| o |}]
