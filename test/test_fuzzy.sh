@@ -29,16 +29,25 @@ SERVER_URL="${SERVER_URL:-http://$SERVER:$PORT}"
 
 PASSED=0
 FAILED=0
+KNOWN_FAIL=0
+KNOWN_FIXED=0
 FAILED_LINES=()
 FAILED_TITLES=()
 FAILED_YEARS=()
 FAILED_TYPES=()
 FAILED_EXPECTED=()
 FAILED_DESCS=()
+XFAIL_LINES=()
+XFAIL_TITLES=()
+XFAIL_YEARS=()
+XFAIL_TYPES=()
+XFAIL_EXPECTED=()
+XFAIL_DESCS=()
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
 NC='\033[0m'
 
 TMPDIR_TEST=$(mktemp -d)
@@ -90,9 +99,10 @@ build_payload() {
 }
 
 # Check results from a response file against expected values
+# Usage: check_results response_file titles years types expected descs xfails
 check_results() {
     local response_file="$1"
-    local -n _titles=$2 _years=$3 _types=$4 _expected=$5 _descs=$6
+    local -n _titles=$2 _years=$3 _types=$4 _expected=$5 _descs=$6 _xfails=$7
     local count=${#_titles[@]}
     local response
     response=$(<"$response_file")
@@ -103,6 +113,7 @@ check_results() {
         local title_types="${_types[$i]}"
         local expected_id="${_expected[$i]}"
         local desc="${_descs[$i]}"
+        local xfail="${_xfails[$i]}"
 
         local imdb_id result_title match_score result_year
         imdb_id=$(echo "$response" | jq -r ".[$i][1].imdb_id")
@@ -115,16 +126,31 @@ check_results() {
         [ -n "$title_types" ] && year_info="$year_info type:$title_types"
 
         if [ "$imdb_id" = "$expected_id" ]; then
-            echo -e "${GREEN}✓${NC} $desc: '$title'${year_info} → \"$result_title\" ($result_year) score: $match_score"
-            ((PASSED++))
+            if [ "$xfail" = "XFAIL" ]; then
+                echo -e "${GREEN}✓ FIXED${NC} $desc: '$title'${year_info} → \"$result_title\" ($result_year) score: $match_score"
+                ((KNOWN_FIXED++))
+            else
+                echo -e "${GREEN}✓${NC} $desc: '$title'${year_info} → \"$result_title\" ($result_year) score: $match_score"
+                ((PASSED++))
+            fi
         else
-            FAILED_LINES+=("${RED}✗${NC} $desc: '$title'${year_info} → \"$result_title\" ($result_year) score: $match_score [expected: $expected_id, got: $imdb_id]")
-            FAILED_TITLES+=("$title")
-            FAILED_YEARS+=("$year")
-            FAILED_TYPES+=("$title_types")
-            FAILED_EXPECTED+=("$expected_id")
-            FAILED_DESCS+=("$desc")
-            ((FAILED++))
+            if [ "$xfail" = "XFAIL" ]; then
+                XFAIL_LINES+=("${YELLOW}✗${NC} $desc: '$title'${year_info} → \"$result_title\" ($result_year) score: $match_score [wanted: $expected_id, got: $imdb_id]")
+                XFAIL_TITLES+=("$title")
+                XFAIL_YEARS+=("$year")
+                XFAIL_TYPES+=("$title_types")
+                XFAIL_EXPECTED+=("$expected_id")
+                XFAIL_DESCS+=("$desc")
+                ((KNOWN_FAIL++))
+            else
+                FAILED_LINES+=("${RED}✗${NC} $desc: '$title'${year_info} → \"$result_title\" ($result_year) score: $match_score [expected: $expected_id, got: $imdb_id]")
+                FAILED_TITLES+=("$title")
+                FAILED_YEARS+=("$year")
+                FAILED_TYPES+=("$title_types")
+                FAILED_EXPECTED+=("$expected_id")
+                FAILED_DESCS+=("$desc")
+                ((FAILED++))
+            fi
         fi
     done
 }
@@ -141,7 +167,6 @@ fi
 
 # --- Parse all sections from the test file ---
 NUM_SECTIONS=0
-declare -a SECTION_NAMES
 
 flush_section() {
     if [ ${#SEC_TITLES[@]} -eq 0 ]; then return; fi
@@ -152,18 +177,21 @@ flush_section() {
     eval "S${s}_TYPES=(\"\${SEC_TYPES[@]}\")"
     eval "S${s}_EXPECTED=(\"\${SEC_EXPECTED[@]}\")"
     eval "S${s}_DESCS=(\"\${SEC_DESCS[@]}\")"
+    eval "S${s}_XFAILS=(\"\${SEC_XFAILS[@]}\")"
+    eval "S${s}_NAME=\"$SEC_NAME\""
     ((NUM_SECTIONS++))
 }
 
-SEC_TITLES=(); SEC_YEARS=(); SEC_TYPES=(); SEC_EXPECTED=(); SEC_DESCS=()
+SEC_TITLES=(); SEC_YEARS=(); SEC_TYPES=(); SEC_EXPECTED=(); SEC_DESCS=(); SEC_XFAILS=()
+SEC_NAME=""
 
 while IFS= read -r line || [ -n "$line" ]; do
     [[ -z "$line" ]] && continue
 
     if [[ "$line" =~ ^#\ ---\ (.+)\ ---$ ]]; then
         flush_section
-        SEC_TITLES=(); SEC_YEARS=(); SEC_TYPES=(); SEC_EXPECTED=(); SEC_DESCS=()
-        SECTION_NAMES+=("${BASH_REMATCH[1]}")
+        SEC_TITLES=(); SEC_YEARS=(); SEC_TYPES=(); SEC_EXPECTED=(); SEC_DESCS=(); SEC_XFAILS=()
+        SEC_NAME="${BASH_REMATCH[1]}"
         continue
     fi
 
@@ -175,6 +203,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     year="$(trim "${FIELDS[2]:-}")"
     title_types_raw="$(trim "${FIELDS[3]:-}")"
     desc="$(trim "${FIELDS[4]:-}")"
+    xfail="$(trim "${FIELDS[5]:-}")"
     [ -z "$desc" ] && desc="$title"
     title_types="$(format_title_types "$title_types_raw")"
 
@@ -183,6 +212,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     SEC_TYPES+=("$title_types")
     SEC_EXPECTED+=("$expected_id")
     SEC_DESCS+=("$desc")
+    SEC_XFAILS+=("$xfail")
 done < "$TEST_FILE"
 
 flush_section
@@ -204,13 +234,15 @@ wait
 # --- Check results in section order ---
 for ((s = 0; s < NUM_SECTIONS; s++)); do
     echo ""
-    echo "--- ${SECTION_NAMES[$s]} ---"
+    eval "section_name=\"\$S${s}_NAME\""
+    echo "--- $section_name ---"
     eval "local_titles=(\"\${S${s}_TITLES[@]}\")"
     eval "local_years=(\"\${S${s}_YEARS[@]}\")"
     eval "local_types=(\"\${S${s}_TYPES[@]}\")"
     eval "local_expected=(\"\${S${s}_EXPECTED[@]}\")"
     eval "local_descs=(\"\${S${s}_DESCS[@]}\")"
-    check_results "$TMPDIR_TEST/response_$s" local_titles local_years local_types local_expected local_descs
+    eval "local_xfails=(\"\${S${s}_XFAILS[@]}\")"
+    check_results "$TMPDIR_TEST/response_$s" local_titles local_years local_types local_expected local_descs local_xfails
 done
 
 # Summary
@@ -218,6 +250,23 @@ echo ""
 echo "=== Results ==="
 echo -e "Passed: ${GREEN}$PASSED${NC}"
 echo -e "Failed: ${RED}$FAILED${NC}"
+[ "$KNOWN_FAIL" -gt 0 ] && echo -e "Known wrong: ${YELLOW}$KNOWN_FAIL${NC}"
+[ "$KNOWN_FIXED" -gt 0 ] && echo -e "Known fixed: ${GREEN}$KNOWN_FIXED${NC}"
+
+if [ "$KNOWN_FAIL" -gt 0 ]; then
+    echo ""
+    echo "=== Expected Failures ==="
+    for line in "${XFAIL_LINES[@]}"; do
+        echo -e "$line"
+    done
+
+    echo ""
+    echo "=== Re-running expected failures (for server debug output) ==="
+    payload=$(build_payload XFAIL_TITLES XFAIL_YEARS XFAIL_TYPES)
+    curl -s -X POST "$SERVER_URL/lookup" \
+        -H "Content-Type: application/json" \
+        -d "$payload" > /dev/null
+fi
 
 if [ $FAILED -gt 0 ]; then
     echo ""
@@ -231,8 +280,6 @@ if [ $FAILED -gt 0 ]; then
     payload=$(build_payload FAILED_TITLES FAILED_YEARS FAILED_TYPES)
     curl -s -X POST "$SERVER_URL/lookup" \
         -H "Content-Type: application/json" \
-        -d "$payload" \
-        -o "$TMPDIR_TEST/response_rerun"
-    check_results "$TMPDIR_TEST/response_rerun" FAILED_TITLES FAILED_YEARS FAILED_TYPES FAILED_EXPECTED FAILED_DESCS
+        -d "$payload" > /dev/null
     exit 1
 fi

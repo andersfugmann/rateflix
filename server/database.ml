@@ -17,11 +17,10 @@ let find_token t token =
 let build titles =
   let lists = Hashtbl.create ~size:100_000 (module String) in
   Array.iteri titles ~f:(fun idx entry ->
-      let norm1 = Normalize.normalize entry.Imdb_data.primary_title in
-      let norm2 = Normalize.normalize entry.Imdb_data.secondary_title in
       let tokens =
-        List.dedup_and_sort ~compare:String.compare
-          (Normalize.tokenize norm1 @ Normalize.tokenize norm2)
+        let t1 = Normalize.normalize entry.Imdb_data.primary_title |> Normalize.tokenize in
+        let t2 = Normalize.normalize entry.Imdb_data.secondary_title |> Normalize.tokenize in
+        List.dedup_and_sort ~compare:String.compare (t1 @ t2)
       in
       List.iter tokens ~f:(fun token ->
           Hashtbl.add_multi lists ~key:token ~data:idx)
@@ -144,7 +143,9 @@ let select_best ~query ~query_tokens candidates =
 (** Search for best matching title *)
 let search t ?year ~title_types query =
   let norm_query = Normalize.normalize query in
-  let query_tokens = Normalize.tokenize norm_query in
+  let query_tokens =
+    Normalize.tokenize norm_query
+    |> List.dedup_and_sort ~compare:String.compare in
   let candidates = lookup t ~query_tokens in
   let total_candidates = List.length candidates in
   let candidates =

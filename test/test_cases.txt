@@ -1,7 +1,8 @@
 # Fuzzy search test cases
-# Format: query | expected_imdb_id [| year [| title_types [| description]]]
+# Format: query | expected_imdb_id [| year [| title_types [| description [| XFAIL]]]]
 # Lines starting with # are comments, blank lines are ignored.
 # Fields are pipe-delimited, with optional trailing fields.
+# If the 6th field is "XFAIL", the test is expected to fail (known wrong match).
 
 # --- Unicode Accented Characters ---
 Amélie | tt0211915 | 2001 | | French é accent
@@ -155,3 +156,17 @@ The Thin Red Line | tt0120863 | 1998 | movie | Thin Red Line
 Kingdom of Heaven | tt0320661 | 2005 | movie | Kingdom of Heaven
 The Jungle Book | tt3040964 | 2016 | movie | Jungle Book 2016
 Shōgun | tt2788316 | 2024 | tvSeries | Shogun
+
+# --- Regression Tests ---
+From the World of John Wick: Ballerina | tt7181546 | 2025 | movie | Ballerina | XFAIL
+Frozen 2 | tt4520988 | 2019 | movie | Frozen II
+Zootropolis 2 | tt26443597 | 2025 | movie | UK title
+The Lost World: Jurassic Park | tt0119567 | 1997 | movie | The Lost World: Jurassic Park
+Jurassic Park 2 - The Lost World | tt0119567 | 1997 | movie | Alternate title ordering
+Guy Ritchie's The Covenant | tt11718596 | 2023 | movie | The Covenant
+Take the Ball, Pass the Ball | tt9135854 | 2018 | movie | Full title with subtitle
+Gold Divers | tt4179538 | | tvSeries | Gold Divers Under the Ice | XFAIL
+Ballerina | tt7181546 | 2025 | movie | Ballerina
+Indiana Jones and the Raiders Of The Lost Ark | tt0082971 | | movie | Raiders of the Lost Ark
+JACKASS 3 | tt1116184 | | movie | Jackass 3D | XFAIL
+Battlestar Galactica - The Mini Series | tt0314979 | | tvMiniSeries | Battlestar Galactica (2003) | XFAIL
