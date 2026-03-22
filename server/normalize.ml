@@ -58,25 +58,21 @@ let to_uchars s =
   collect []
 
 let uchar_to_base_char u =
-  let nfd = Uunf.create `NFD in
-  ignore (Uunf.add nfd (`Uchar u));
-  match Uunf.add nfd `End with
-  | `Uchar base -> Uchar.to_char base
-  | `Await | `End -> Uchar.to_char u
+  Uchar.to_char u
 
-let equal_caseless ?(to_base_char=uchar_to_base_char) a b =
-  match to_base_char a with
+let equal_caseless a b =
+  match uchar_to_base_char a with
   | None -> false
   | Some a ->
-    match to_base_char b with
+    match uchar_to_base_char b with
     | None -> false
     | Some b -> Char.Caseless.equal a b
 
 (** Substitution cost: 0.0 for identical, 0.1 for case-only difference, 1.0 otherwise *)
-let substitution_cost ?to_base_char a b =
+let substitution_cost a b =
   match Uchar.equal a b with
   | true -> 0.0
-  | false when equal_caseless ?to_base_char a b -> 0.1
+  | false when equal_caseless a b -> 0.1
   | false -> 1.0
 
 (** Weighted Levenshtein distance using two mutable arrays.
