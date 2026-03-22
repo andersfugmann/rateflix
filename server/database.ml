@@ -69,14 +69,23 @@ let lookup t ~query_tokens =
   |> List.filter_mapi ~f:(fun i (t, c) -> match i > 0 && c > 10000 with true -> None | false -> Some t)
   |> List.filter_map ~f:(fun token -> Hashtbl.find t.inverted_index token)
   |> List.reduce ~f:(Array.merge ~compare:Int.compare)
-  |> Option.value ~default:[||]
-  |> fun v -> Array.length v, Array.to_list v
+  |> Option.value_map ~default:[] ~f:Array.to_list
+  |> List.remove_consecutive_duplicates ~equal:Int.equal
+
 
 (** Check if title type matches filter *)
 let matches_title_types ~title_types entry =
   match title_types with
   | None -> true
   | Some types -> List.mem ~equal:Poly.equal types entry.Imdb_data.title_type
+
+let matches_year ~year entry =
+  match year with
+  | None -> true
+  | Some year ->
+    match entry.Imdb_data.year with
+    | Some year' -> year = year'
+    | None -> true
 
 (** Jaccard similarity between two token sets: |intersection| / |union|.
     Returns 0.0 when both sets are empty, 1.0 for identical sets. *)
@@ -92,16 +101,16 @@ let jaccard_similarity xs =
 
 (** Calculate normalized score: 1.0 = perfect match, 0.0 = completely different.
     Case differences cost 0.1 per char, other edits cost 1.0. *)
-let calculate_score ~query title =
-  let distance = Normalize.weighted_edit_distance query title in
+let calculate_score ?max_edits ~query title =
+  let distance = Normalize.weighted_edit_distance ?max_edits query title in
   let max_len = max (String.length query) (String.length title) in
   match max_len with
   | 0 -> 1.0
   | _ -> 1.0 -. (distance /. Float.of_int max_len)
 
-let calculate_item_score ~query { Imdb_data.primary_title; secondary_title; _ } =
-  let primary_score = calculate_score ~query primary_title in
-  let secondary_score = calculate_score ~query secondary_title in
+let calculate_item_score ~query ?max_edits { Imdb_data.primary_title; secondary_title; _ } =
+  let primary_score = calculate_score ?max_edits ~query primary_title in
+  let secondary_score = calculate_score ?max_edits ~query secondary_title in
   Float.max primary_score secondary_score
 
 type search_stats = {
@@ -131,27 +140,16 @@ let select_best ~query ~query_tokens candidates =
 let search t ?year ~title_types query =
   let norm_query = Normalize.normalize query in
   let query_tokens = Normalize.tokenize norm_query in
-  let query_len = String.length query in
-  let (total_candidates, candidates) = lookup t ~query_tokens in
+  let candidates = lookup t ~query_tokens in
+  let total_candidates = List.length candidates in
   let candidates =
     candidates
     |> List.filter_map ~f:(fun idx ->
         let entry = t.titles.(idx) in
-        match matches_title_types ~title_types entry with
+        match matches_title_types ~title_types entry && matches_year ~year entry with
         | false -> None
         | true -> Some entry
       )
-    |> (fun v -> Option.value_map year ~default:v ~f:(fun year' ->
-        List.filter v ~f:(fun entry -> match entry.Imdb_data.year with
-            | Some year -> year = year'
-            | None -> false
-          )
-      ))
-    |> List.sort ~compare:(fun e1 e2 ->
-        let len e = Int.min
-            (Int.abs (String.length e.Imdb_data.primary_title - query_len))
-            (Int.abs (String.length e.Imdb_data.secondary_title - query_len)) in
-        Int.compare (len e1) (len e2))
   in
   let num_filtered = List.length candidates in
   select_best ~query ~query_tokens candidates
