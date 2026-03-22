@@ -2,43 +2,16 @@
 open Base
 open Bin_prot.Std
 
-module Inverted_index = struct
-  type t = (string, int array) Hashtbl.t
-
-  let to_stdlib tbl =
-    let h = Stdlib.Hashtbl.create (Hashtbl.length tbl) in
-    Hashtbl.iteri tbl ~f:(fun ~key ~data -> Stdlib.Hashtbl.replace h key data);
-    h
-
-  let of_stdlib h =
-    let tbl = Hashtbl.create ~size:(Stdlib.Hashtbl.length h) (module String) in
-    Stdlib.Hashtbl.iter (fun key data -> Hashtbl.set tbl ~key ~data) h;
-    tbl
-
-  let bin_size_t tbl =
-    bin_size_hashtbl bin_size_string (bin_size_array bin_size_int) (to_stdlib tbl)
-
-  let bin_write_t buf ~pos tbl =
-    bin_write_hashtbl bin_write_string (bin_write_array bin_write_int) buf ~pos (to_stdlib tbl)
-
-  let bin_read_t buf ~pos_ref =
-    of_stdlib (bin_read_hashtbl bin_read_string (bin_read_array bin_read_int) buf ~pos_ref)
-
-  let __bin_read_t__ _buf ~pos_ref _n =
-    Bin_prot.Common.raise_read_error (Bin_prot.Common.ReadError.Silly_type "Inverted_index.t") !pos_ref
-
-  let bin_shape_t =
-    bin_shape_hashtbl bin_shape_string (bin_shape_array bin_shape_int)
-
-  let bin_writer_t = { Bin_prot.Type_class.size = bin_size_t; write = bin_write_t }
-  let bin_reader_t = { Bin_prot.Type_class.read = bin_read_t; vtag_read = __bin_read_t__ }
-  let bin_t = { Bin_prot.Type_class.shape = bin_shape_t; writer = bin_writer_t; reader = bin_reader_t }
-end
-
 type t = {
   titles: Imdb_data.title_entry array;
-  inverted_index: Inverted_index.t;
+  inverted_index: (string * int array) array;
 } [@@deriving bin_io]
+
+(** Binary search for a key in the sorted inverted index *)
+let find_token t token =
+  Array.binary_search t.inverted_index ~compare:(fun (k, _) token -> String.compare k token)
+    `First_equal_to token
+  |> Option.map ~f:(fun i -> snd t.inverted_index.(i))
 
 (** Build inverted index from title entries *)
 let build titles =
@@ -53,8 +26,11 @@ let build titles =
       List.iter tokens ~f:(fun token ->
           Hashtbl.add_multi lists ~key:token ~data:idx)
     );
-  let inverted_index = Hashtbl.map lists ~f:(fun indices ->
-      Array.of_list (List.dedup_and_sort ~compare:Int.compare indices))
+  let inverted_index =
+    Hashtbl.fold lists ~init:[] ~f:(fun ~key ~data acc ->
+      (key, Array.of_list (List.dedup_and_sort ~compare:Int.compare data)) :: acc)
+    |> Array.of_list
+    |> Array.sorted_copy ~compare:(fun (k1, _) (k2, _) -> String.compare k1 k2)
   in
   { titles; inverted_index }
 
@@ -62,12 +38,12 @@ let lookup t ~query_tokens =
   query_tokens
   |> List.dedup_and_sort ~compare:String.compare
   |> List.filter_map ~f:(fun token ->
-      Hashtbl.find t.inverted_index token
+      find_token t token
       |> Option.map ~f:(fun arr -> token, Array.length arr)
     )
   |> List.sort ~compare:(fun (_, a) (_, b) -> Int.compare a b)
   |> List.filter_mapi ~f:(fun i (t, c) -> match i > 0 && c > 10000 with true -> None | false -> Some t)
-  |> List.filter_map ~f:(fun token -> Hashtbl.find t.inverted_index token)
+  |> List.filter_map ~f:(fun token -> find_token t token)
   |> List.reduce ~f:(Array.merge ~compare:Int.compare)
   |> Option.value_map ~default:[] ~f:Array.to_list
   |> List.remove_consecutive_duplicates ~equal:Int.equal
