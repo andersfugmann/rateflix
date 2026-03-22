@@ -103,10 +103,7 @@ let jaccard_similarity xs =
     Case differences cost 0.1 per char, other edits cost 1.0. *)
 let calculate_score ?max_edits ~query title =
   let distance = Normalize.weighted_edit_distance ?max_edits query title in
-  let max_len = max (String.length query) (String.length title) in
-  match max_len with
-  | 0 -> 1.0
-  | _ -> 1.0 -. (distance /. Float.of_int max_len)
+  distance
 
 let calculate_item_score ~query ?max_edits { Imdb_data.primary_title; secondary_title; _ } =
   let primary_score = calculate_score ?max_edits ~query primary_title in
@@ -120,20 +117,51 @@ type search_stats = {
 
 let select_best ~query ~query_tokens candidates =
   let score = jaccard_similarity query_tokens in
-  List.map candidates ~f:(fun entry ->
-      let tp = Normalize.tokenize (Normalize.normalize entry.Imdb_data.primary_title) in
-      let ts = Normalize.tokenize (Normalize.normalize entry.Imdb_data.secondary_title) in
-      let jaccard = Float.max (score tp) (score ts) in
-      entry, jaccard
+  let weighted_edit_distance =
+    let query_uchars = Normalize.to_uchars query in
+    fun ?max_edits s ->
+      Normalize.weighted_edit_distance_uchars ?max_edits query_uchars (Normalize.to_uchars s)
+  in
+  (* We need to split up into primary and secondary *)
+  candidates
+  |> List.concat_map ~f:(fun ({ Imdb_data.primary_title; secondary_title; _ } as entry) ->
+      (* And drop secondary if they are equal *)
+      let res = [primary_title, entry] in
+      match String.equal primary_title secondary_title with
+      | true -> res
+      | false ->
+        (secondary_title, entry) :: res
     )
-  |> List.sort_and_group ~compare:(fun (_, m1) (_, m2) -> Float.compare m2 m1)
+  |> List.map ~f:(fun (title, entry) ->
+      let tokens = Normalize.tokenize (Normalize.normalize title) in
+      (score tokens, title, entry)
+    )
+  |> List.sort_and_group ~compare:(fun (m1, _, _) (m2, _, _) -> Float.compare m2 m1)
   |> List.hd
   |> Option.value ~default:[]
-  |> List.map ~f:(fun (elt, _) -> elt, calculate_item_score ~query elt)
-  |> List.max_elt ~compare:(fun (e1, s1) (e2, s2) -> match Float.compare s1 s2, e1.Imdb_data.year, e2.year with
-      | 0, Some y1, Some y2 -> Int.compare y1 y2
-      | n, _, _ -> n
+  |> List.map ~f:(fun (_score, title, entry) -> (title, entry))
+  |> List.fold ~init:(1.0, None) ~f:(fun (score, best) (title, elt) ->
+      let max_length = Int.max (String.length query) (String.length title) |> Float.of_int in
+      let max_edits = match score with
+        | 0.0 -> Float.max_value
+        | n -> n *. max_length
+      in
+      let distance = weighted_edit_distance ~max_edits title in
+      (* Stdlib.Printf.printf "%.3f: tt%07d %s\n" distance elt.Imdb_data.tconst title; *)
+      let score' = distance /. max_length in
+      match Float.compare score score' with
+      | -1 -> (score, best)
+      | 1 -> (score', Some elt)
+      | _ (* 0 *) ->
+        match best, elt with
+        | Some { Imdb_data.year = Some year; _}, { Imdb_data.year = Some year'; _} when year' > year ->
+          (score, Some elt)
+        | _ -> (score, best)
     )
+  |> function
+  | (_, None) -> None
+  | (score, Some elt) ->
+    Some (elt, (1.0 -. score))
 
 
 (** Search for best matching title *)

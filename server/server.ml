@@ -34,11 +34,11 @@ let log_response addr responses =
     in
     let stats_str = match stats with
       | Some (s : Database.search_stats) ->
-        Printf.sprintf " [candidates: %d, filtered: %d]" s.candidates s.filtered
+        Printf.sprintf " [candidates: %4d, filtered: %3d]" s.candidates s.filtered
       | None -> " [no match]"
     in
-    Printf.printf "[%s] \"%s\"%s -> \"%s\"%s %.2f%s [%.1fms]\n%!"
-      addr query.title year_str result.title result_year_str result.match_score stats_str elapsed_ms
+    Printf.printf "[%s] %.2f%s [%4.1fms] \"%s\"%s -> \"%s\"%s\n%!"
+      addr result.match_score stats_str elapsed_ms query.title year_str result.title result_year_str
   ) responses
 
 (** Handle a single HTTP request *)
