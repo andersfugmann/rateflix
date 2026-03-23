@@ -37,11 +37,6 @@ let split_words s =
   |> Sequence.group ~break:(fun a b -> Uchar.equal a space || Uchar.equal b space)
   |> Sequence.filter ~f:(function | [ a ] -> not (Uchar.equal a space) | _ -> true)
 
-(** Convert a Uchar.t list to a UTF-8 string *)
-let uchars_to_utf8 uchars =
-  let buf = Buffer.create 16 in
-  List.iter uchars ~f:(Uutf.Buffer.add_utf_8 buf);
-  Buffer.contents buf
 
 let uchar_to_ascii c =
   match Uchar.to_scalar c with
@@ -67,10 +62,6 @@ let normalize s =
     )
   |> Sequence.to_list
 
-(** Tokenize a normalized string into words *)
-let tokenize s =
-  String.split ~on:' ' s
-  |> List.filter ~f:(fun w -> String.length w > 0)
 
 (** Decode a UTF-8 string into an array of unicode codepoints *)
 let to_uchars s =
@@ -132,8 +123,6 @@ let weighted_edit_distance_uchars ~cost ?max_edits a b =
       prev.(n)
     with Early_exit -> Float.infinity
 
-let weighted_edit_distance ~cost ?max_edits s1 s2 =
-  weighted_edit_distance_uchars ~cost ?max_edits (to_uchars s1) (to_uchars s2)
 
 (* Expect tests *)
 let%expect_test "normalize: Extended chars" =
@@ -172,65 +161,52 @@ let%expect_test "normalize: numbers kept" =
   print_endline (normalize "2001: A Space Odyssey" |> String.concat ~sep:" ");
   [%expect {| 2001 a space odyssey |}]
 
-let%expect_test "tokenize: basic" =
-  tokenize "the matrix" |> String.concat ~sep:", " |> print_endline;
-  [%expect {| the, matrix |}]
-
-let%expect_test "tokenize: multiple spaces" =
-  tokenize "the   matrix" |> String.concat ~sep:", " |> print_endline;
-  [%expect {| the, matrix |}]
-
-let%expect_test "tokenize: single word" =
-  tokenize "amelie" |> String.concat ~sep:", " |> print_endline;
-  [%expect {| amelie |}]
-
-let%expect_test "tokenize: empty string" =
-  tokenize "" |> String.concat ~sep:", " |> print_endline;
-  [%expect {| |}]
 
 let%expect_test "normalize: Greek letters (non-ASCII)" =
   (* Greek 'Ω' (U+03A9) lowercases to 'ω' (U+03C9) which is > 255 *)
   print_endline (normalize "Ωmega" |> String.concat ~sep:" ");
   [%expect {| mega |}]
 
+let ed s1 s2 = weighted_edit_distance_uchars ~cost:substitution_cost (to_uchars s1) (to_uchars s2)
+
 let%expect_test "edit_distance: identical strings" =
-  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost "hello" "hello");
+  printf "%.1f" (ed "hello" "hello");
   [%expect {| 0.0 |}]
 
 let%expect_test "edit_distance: case only" =
-  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost "Hello" "hello");
+  printf "%.1f" (ed "Hello" "hello");
   [%expect {| 0.1 |}]
 
 let%expect_test "edit_distance: all caps" =
-  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost "THE" "the");
+  printf "%.1f" (ed "THE" "the");
   [%expect {| 0.3 |}]
 
 let%expect_test "edit_distance: one char substitution" =
-  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost "cat" "bat");
+  printf "%.1f" (ed "cat" "bat");
   [%expect {| 1.0 |}]
 
 let%expect_test "edit_distance: insertion" =
-  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost "helo" "hello");
+  printf "%.1f" (ed "helo" "hello");
   [%expect {| 1.0 |}]
 
 let%expect_test "edit_distance: accent difference" =
-  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost "Amelie" "Amélie");
+  printf "%.1f" (ed "Amelie" "Amélie");
   [%expect {| 1.0 |}]
 
 let%expect_test "edit_distance: case + accent" =
-  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost "amelie" "Amélie");
+  printf "%.1f" (ed "amelie" "Amélie");
   [%expect {| 1.1 |}]
 
 let%expect_test "edit_distance: max_edits short-circuit" =
-  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost ~max_edits:0.5 "cat" "bat");
+  printf "%.1f" (weighted_edit_distance_uchars ~cost:substitution_cost ~max_edits:0.5 (to_uchars "cat") (to_uchars "bat"));
   [%expect {| inf |}]
 
 let%expect_test "edit_distance: max_edits allows case change" =
-  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost ~max_edits:0.5 "Cat" "cat");
+  printf "%.1f" (weighted_edit_distance_uchars ~cost:substitution_cost ~max_edits:0.5 (to_uchars "Cat") (to_uchars "cat"));
   [%expect {| 0.1 |}]
 
 let%expect_test "edit_distance: max_edits exact match" =
-  printf "%.1f" (weighted_edit_distance ~cost:substitution_cost ~max_edits:0.0 "hello" "hello");
+  printf "%.1f" (weighted_edit_distance_uchars ~cost:substitution_cost ~max_edits:0.0 (to_uchars "hello") (to_uchars "hello"));
   [%expect {| 0.0 |}]
 
 let%expect_test "normalize: roman numeral Ⅲ (unicode)" =

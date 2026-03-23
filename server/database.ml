@@ -84,14 +84,6 @@ let jaccard_similarity xs =
 
 (** Calculate normalized score: 1.0 = perfect match, 0.0 = completely different.
     Case differences cost 0.1 per char, other edits cost 1.0. *)
-let calculate_score ?max_edits ~query title =
-  let distance = Normalize.weighted_edit_distance ~cost:Normalize.substitution_cost ?max_edits query title in
-  distance
-
-let calculate_item_score ~query ?max_edits { Imdb_data.primary_title; secondary_title; _ } =
-  let primary_score = calculate_score ?max_edits ~query primary_title in
-  let secondary_score = calculate_score ?max_edits ~query secondary_title in
-  Float.max primary_score secondary_score
 
 type search_stats = {
   candidates: int;
