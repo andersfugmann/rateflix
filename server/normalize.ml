@@ -84,44 +84,49 @@ let equal_caseless a b =
     | None -> false
     | Some b -> Char.Caseless.equal a b
 
-(** Substitution cost: 0.0 for identical, 0.1 for case-only difference, 1.0 otherwise *)
-let substitution_cost a b =
-  match Uchar.equal a b with
-  | true -> 0.0
-  | false when equal_caseless a b -> 0.1
-  | false -> 1.0
 
-(** Weighted Levenshtein distance using two mutable arrays.
-    If ~max_edits is provided, returns infinity when distance is known to exceed it.
+let edit_distance_scale = 10.0
+
+(** Weighted Levenshtein distance (×10 scaled integer) with early exit.
+    When ~max_edits is provided, returns Int.max_value if minimum row cost exceeds it.
     Accepts pre-decoded uchar arrays to avoid repeated UTF-8 decoding. *)
-let weighted_edit_distance_uchars ~cost ?max_edits a b =
+let weighted_edit_distance_uchars ?(max_edits=Int.max_value) a b =
+  let exception Early_exit in
+  let insert_cost _ = 10 in
+  let delete_cost _ = 10 in
+  let replace_cost a b =
+    match Uchar.equal a b with
+    | true -> 0
+    | false when equal_caseless a b -> 1
+    | false -> 20
+  in
   let m = Array.length a in
   let n = Array.length b in
-  match max_edits with
-  | Some max_edits when Float.(of_int Int.(abs (m - n)) > max_edits) -> Float.infinity
-  | _ ->
-    let prev = Array.init (n + 1) ~f:Float.of_int in
-    let curr = Array.create ~len:(n + 1) 0.0 in
-    let exception Early_exit in
-    try
-      for i = 0 to m - 1 do
-        curr.(0) <- Float.of_int (i + 1);
-        let row_min = ref curr.(0) in
-        for j = 0 to n - 1 do
-          let sub_cost = cost a.(i) b.(j) in
-          let v = Float.min
-            (Float.min (prev.(j + 1) +. 1.0) (curr.(j) +. 1.0))
-            (prev.(j) +. sub_cost) in
-          curr.(j + 1) <- v;
-          if Float.(v < !row_min) then row_min := v
-        done;
-        (match max_edits with
-         | Some max_edits when Float.(!row_min > max_edits) -> raise Early_exit
-         | _ -> ());
-        Array.blit ~src:curr ~src_pos:0 ~dst:prev ~dst_pos:0 ~len:(n + 1)
+  let prev = Array.init (n + 1) ~f:(fun j ->
+    let v = ref 0 in
+    for jj = 0 to j - 1 do v := !v + insert_cost b.(jj) done;
+    !v)
+  in
+  let curr = Array.create ~len:(n + 1) 0 in
+  try
+    for i = 0 to m - 1 do
+      curr.(0) <- prev.(0) + delete_cost a.(i);
+      let row_min = ref curr.(0) in
+      for j = 0 to n - 1 do
+        let del = prev.(j + 1) + delete_cost a.(i) in
+        let ins = curr.(j) + insert_cost b.(j) in
+        let sub = prev.(j) + replace_cost a.(i) b.(j) in
+        let v = Int.min (Int.min del ins) sub in
+        curr.(j + 1) <- v;
+        if v < !row_min then row_min := v
       done;
-      prev.(n)
-    with Early_exit -> Float.infinity
+      (match !row_min > max_edits with
+       | true -> raise Early_exit
+       | false -> ());
+      Array.blit ~src:curr ~src_pos:0 ~dst:prev ~dst_pos:0 ~len:(n + 1)
+    done;
+    prev.(n)
+  with Early_exit -> Int.max_value
 
 
 (* Expect tests *)
@@ -167,47 +172,55 @@ let%expect_test "normalize: Greek letters (non-ASCII)" =
   print_endline (normalize "Ωmega" |> String.concat ~sep:" ");
   [%expect {| mega |}]
 
-let ed s1 s2 = weighted_edit_distance_uchars ~cost:substitution_cost (to_uchars s1) (to_uchars s2)
+let ed s1 s2 = weighted_edit_distance_uchars (to_uchars s1) (to_uchars s2)
 
 let%expect_test "edit_distance: identical strings" =
-  printf "%.1f" (ed "hello" "hello");
-  [%expect {| 0.0 |}]
+  printf "%d" (ed "hello" "hello");
+  [%expect {| 0 |}]
 
 let%expect_test "edit_distance: case only" =
-  printf "%.1f" (ed "Hello" "hello");
-  [%expect {| 0.1 |}]
+  printf "%d" (ed "Hello" "hello");
+  [%expect {| 1 |}]
 
 let%expect_test "edit_distance: all caps" =
-  printf "%.1f" (ed "THE" "the");
-  [%expect {| 0.3 |}]
+  printf "%d" (ed "THE" "the");
+  [%expect {| 3 |}]
 
 let%expect_test "edit_distance: one char substitution" =
-  printf "%.1f" (ed "cat" "bat");
-  [%expect {| 1.0 |}]
+  printf "%d" (ed "cat" "bat");
+  [%expect {| 20 |}]
 
 let%expect_test "edit_distance: insertion" =
-  printf "%.1f" (ed "helo" "hello");
-  [%expect {| 1.0 |}]
+  printf "%d" (ed "helo" "hello");
+  [%expect {| 10 |}]
 
 let%expect_test "edit_distance: accent difference" =
-  printf "%.1f" (ed "Amelie" "Amélie");
-  [%expect {| 1.0 |}]
+  printf "%d" (ed "Amelie" "Amélie");
+  [%expect {| 10 |}]
 
 let%expect_test "edit_distance: case + accent" =
-  printf "%.1f" (ed "amelie" "Amélie");
-  [%expect {| 1.1 |}]
+  printf "%d" (ed "amelie" "Amélie");
+  [%expect {| 11 |}]
+
+let%expect_test "edit_distance: Star Wars: Skeleton Crew" =
+  printf "%d" (ed "Star Wars: Skeleton Crew" "Star Wars: Detours");
+  [%expect {| 120 |}]
+
+let%expect_test "edit_distance: Star Wars: Skeleton Crew" =
+  printf "%d" (ed "Star Wars: Skeleton Crew" "Skeleton Crew");
+  [%expect {| 110 |}]
 
 let%expect_test "edit_distance: max_edits short-circuit" =
-  printf "%.1f" (weighted_edit_distance_uchars ~cost:substitution_cost ~max_edits:0.5 (to_uchars "cat") (to_uchars "bat"));
-  [%expect {| inf |}]
+  printf "%d" (weighted_edit_distance_uchars ~max_edits:5 (to_uchars "cat") (to_uchars "bat"));
+  [%expect {| 4611686018427387903 |}]
 
 let%expect_test "edit_distance: max_edits allows case change" =
-  printf "%.1f" (weighted_edit_distance_uchars ~cost:substitution_cost ~max_edits:0.5 (to_uchars "Cat") (to_uchars "cat"));
-  [%expect {| 0.1 |}]
+  printf "%d" (weighted_edit_distance_uchars ~max_edits:5 (to_uchars "Cat") (to_uchars "cat"));
+  [%expect {| 1 |}]
 
 let%expect_test "edit_distance: max_edits exact match" =
-  printf "%.1f" (weighted_edit_distance_uchars ~cost:substitution_cost ~max_edits:0.0 (to_uchars "hello") (to_uchars "hello"));
-  [%expect {| 0.0 |}]
+  printf "%d" (weighted_edit_distance_uchars ~max_edits:0 (to_uchars "hello") (to_uchars "hello"));
+  [%expect {| 0 |}]
 
 let%expect_test "normalize: roman numeral Ⅲ (unicode)" =
   print_endline (normalize "Movie Ⅲ" |> String.concat ~sep:" ");

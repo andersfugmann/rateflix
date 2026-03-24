@@ -70,17 +70,21 @@ let matches_year ~year entry =
     | Some year' -> year = year'
     | None -> true
 
-(** Jaccard similarity between two token sets: |intersection| / |union|.
-    Returns 0.0 when both sets are empty, 1.0 for identical sets. *)
-let jaccard_similarity xs =
+let jaccard_similarities xs =
   let set_x = Set.of_list (module String) xs in
+  let length_x = Set.length set_x in
   fun ys ->
-  let set_y = Set.of_list (module String) ys in
-  match Set.union set_x set_y |> Set.length with
-  | 0 -> 0.0
-  | union ->
+    let set_y = Set.of_list (module String) ys in
+    let length_y = Set.length set_y in
+    let max_length = Int.max length_x length_y in
     let shared = Set.inter set_x set_y |> Set.length in
-    Float.(of_int shared / of_int union)
+    let union = Set.union set_x set_y |> Set.length in
+    let j1 = Float.(of_int shared / of_int union) in
+    let j2 = Float.(of_int shared / of_int max_length) in
+    let j3 = Float.(of_int shared / of_int length_x) in
+    let j4 = Float.(of_int shared / of_int length_y) in
+    [| j1; j2; j3; j4 |]
+
 
 (** Calculate normalized score: 1.0 = perfect match, 0.0 = completely different.
     Case differences cost 0.1 per char, other edits cost 1.0. *)
@@ -90,13 +94,14 @@ type search_stats = {
   filtered: int;
 }
 
+let jaccard_similarities_idx = [0; 2; 3]
+
 let select_best ~query ~query_tokens candidates =
-  let score = jaccard_similarity query_tokens in
+  let jaccard_similarities = jaccard_similarities query_tokens in
   let weighted_edit_distance =
     let query_uchars = Normalize.to_uchars query in
-    let cost = Normalize.substitution_cost in
     fun ?max_edits s ->
-      Normalize.weighted_edit_distance_uchars ~cost ?max_edits query_uchars (Normalize.to_uchars s)
+      Normalize.weighted_edit_distance_uchars ?max_edits query_uchars (Normalize.to_uchars s)
   in
   (* We need to split up into primary and secondary *)
   candidates
@@ -110,19 +115,25 @@ let select_best ~query ~query_tokens candidates =
     )
   |> List.map ~f:(fun (title, entry) ->
       let tokens = Normalize.normalize title in
-      (score tokens, title, entry)
+      (jaccard_similarities tokens, title, entry)
     )
-  |> List.sort_and_group ~compare:(fun (m1, _, _) (m2, _, _) -> Float.compare m2 m1)
-  |> List.hd
-  |> Option.value ~default:[]
+  |> (fun candidates ->
+      jaccard_similarities_idx
+      |> List.concat_map ~f:(fun idx ->
+          List.sort_and_group candidates ~compare:(fun (s1, _, _) (s2, _, _) -> Float.compare (Array.get s2 idx) (Array.get s1 idx))
+          |> List.hd
+          |> Option.value ~default:[]
+        )
+    )
+  |> List.dedup_and_sort ~compare:(fun (_, _, e1) (_, _, e2) -> Int.compare e1.Imdb_data.tconst e2.Imdb_data.tconst)
   |> List.map ~f:(fun (_score, title, entry) -> (title, entry))
   |> List.fold ~init:(1.0, None) ~f:(fun (score, best) (title, elt) ->
       let max_length = Int.max (String.length query) (String.length title) |> Float.of_int in
       let max_edits = match score with
-        | 0.0 -> Float.max_value
-        | n -> n *. max_length
+        | 0.0 -> Int.max_value
+        | n -> Float.to_int (Float.round_up (n *. max_length *. Normalize.edit_distance_scale))
       in
-      let distance = weighted_edit_distance ~max_edits title in
+      let distance = Float.of_int (weighted_edit_distance ~max_edits title) /. Normalize.edit_distance_scale in
       (* Stdlib.Printf.printf "%.3f: tt%07d %s\n" distance elt.Imdb_data.tconst title; *)
       let score' = distance /. max_length in
       match Float.compare score score' with
