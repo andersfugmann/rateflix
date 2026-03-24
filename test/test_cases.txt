@@ -163,7 +163,6 @@ Frozen 2 | tt4520988 | 2019 | movie | Frozen II
 Zootropolis 2 | tt26443597 | 2025 | movie | UK title
 The Lost World: Jurassic Park | tt0119567 | 1997 | movie | The Lost World: Jurassic Park
 Jurassic Park 2 - The Lost World | tt0119567 | 1997 | movie | Alternate title ordering
-Guy Ritchie's The Covenant | tt11718596 | 2023 | movie | The Covenant
 Take the Ball, Pass the Ball | tt9135854 | 2018 | movie | Full title with subtitle
 Gold Divers | tt4179538 | | tvSeries | Gold Divers Under the Ice | XFAIL
 Ballerina | tt7181546 | 2025 | movie | Ballerina

@@ -7,6 +7,11 @@ type t = {
   inverted_index: (string * int array) array;
 } [@@deriving bin_io]
 
+type search_stats = {
+  candidates: int;
+  filtered: int;
+}
+
 (** Binary search for a key in the sorted inverted index *)
 let find_token t token =
   Array.binary_search t.inverted_index ~compare:(fun (k, _) token -> String.compare k token)
@@ -45,11 +50,6 @@ let lookup t ~query_tokens =
   |> List.drop_while ~f:(function | (_, 0) -> true | _ -> false)
   |> List.filteri ~f:(fun i (_, c) -> i < 1 || c < 10000)
   |> List.map ~f:fst
-  |> (fun t ->
-      match List.exists query_tokens ~f:(String.Caseless.equal "m") || true  with
-      | true -> Stdlib.Printf.printf "Query: [%s]: [%s]\n" (String.concat ~sep:"; " query_tokens)(String.concat ~sep:"; " t); t
-      | false -> t
-    )
   |> List.filter_map ~f:(fun token -> find_token t token)
   |> List.reduce ~f:(Array.merge ~compare:Int.compare)
   |> Option.value_map ~default:[] ~f:Array.to_list
@@ -71,30 +71,26 @@ let matches_year ~year entry =
     | None -> true
 
 let jaccard_similarities xs =
+  (* Could this be done better? *)
   let set_x = Set.of_list (module String) xs in
   let length_x = Set.length set_x in
   fun ys ->
     let set_y = Set.of_list (module String) ys in
     let length_y = Set.length set_y in
     let max_length = Int.max length_x length_y in
-    let shared = Set.inter set_x set_y |> Set.length in
-    let union = Set.union set_x set_y |> Set.length in
-    let j1 = Float.(of_int shared / of_int union) in
-    let j2 = Float.(of_int shared / of_int max_length) in
-    let j3 = Float.(of_int shared / of_int length_x) in
-    let j4 = Float.(of_int shared / of_int length_y) in
+    let inter = Set.inter set_x set_y |> Set.length in
+    let union = length_x + length_y - inter in
+    let j1 = Float.(of_int inter / of_int union) in
+    let j2 = Float.(of_int inter / of_int max_length) in
+    let j3 = Float.(of_int inter / of_int length_x) in
+    let j4 = Float.(of_int inter / of_int length_y) in
     [| j1; j2; j3; j4 |]
 
-
-(** Calculate normalized score: 1.0 = perfect match, 0.0 = completely different.
-    Case differences cost 0.1 per char, other edits cost 1.0. *)
-
-type search_stats = {
-  candidates: int;
-  filtered: int;
-}
-
-let jaccard_similarities_idx = [0; 2; 3]
+let jaccard_similarities_idx = [0;2;3]
+let jaccard_best_score scores =
+  List.map jaccard_similarities_idx ~f:(fun idx -> Array.get scores idx)
+  |> List.max_elt ~compare:Float.compare
+  |> Option.value ~default:0.0
 
 let select_best ~query ~query_tokens candidates =
   let jaccard_similarities = jaccard_similarities query_tokens in
@@ -103,10 +99,8 @@ let select_best ~query ~query_tokens candidates =
     fun ?max_edits s ->
       Normalize.weighted_edit_distance_uchars ?max_edits query_uchars (Normalize.to_uchars s)
   in
-  (* We need to split up into primary and secondary *)
   candidates
   |> List.concat_map ~f:(fun ({ Imdb_data.primary_title; secondary_title; _ } as entry) ->
-      (* And drop secondary if they are equal *)
       let res = [primary_title, entry] in
       match String.equal primary_title secondary_title with
       | true -> res
@@ -126,29 +120,33 @@ let select_best ~query ~query_tokens candidates =
         )
     )
   |> List.dedup_and_sort ~compare:(fun (_, _, e1) (_, _, e2) -> Int.compare e1.Imdb_data.tconst e2.Imdb_data.tconst)
+    (*
+  |> List.map ~f:(fun (scores, a, b) -> (jaccard_best_score scores, a, b))
+  |> List.max_elt ~compare:(fun (s1, _, _) (s2, _, _) -> Float.compare s1 s2)
+  |> Option.value_map ~f:(fun (_, title, b) -> (weighted_edit_distance title, Some (b, title))) ~default:(Int.max_value, None)
+ *)
   |> List.map ~f:(fun (_score, title, entry) -> (title, entry))
-  |> List.fold ~init:(1.0, None) ~f:(fun (score, best) (title, elt) ->
-      let max_length = Int.max (String.length query) (String.length title) |> Float.of_int in
-      let max_edits = match score with
-        | 0.0 -> Int.max_value
-        | n -> Float.to_int (Float.round_up (n *. max_length *. Normalize.edit_distance_scale))
-      in
-      let distance = Float.of_int (weighted_edit_distance ~max_edits title) /. Normalize.edit_distance_scale in
-      (* Stdlib.Printf.printf "%.3f: tt%07d %s\n" distance elt.Imdb_data.tconst title; *)
-      let score' = distance /. max_length in
-      match Float.compare score score' with
-      | -1 -> (score, best)
-      | 1 -> (score', Some elt)
+  |> List.fold ~init:(Int.max_value, None) ~f:(fun (max_edits, best) (title, elt) ->
+      let distance = weighted_edit_distance ~max_edits title in
+      (* let max_length = Int.max (String.length query) (String.length title) in *)
+      (* Stdlib.Printf.printf "%d/%d: tt%07d %s\n" distance max_length elt.Imdb_data.tconst title; *)
+      match Int.compare max_edits distance with
+      | -1 -> (max_edits, best)
+      | 1 -> (distance, Some (elt, title))
       | _ (* 0 *) ->
-        match best, elt with
-        | Some { Imdb_data.year = Some year; _}, { Imdb_data.year = Some year'; _} when year' > year ->
-          (score, Some elt)
-        | _ -> (score, best)
+        let best =
+          match best, elt with
+          | Some ({ Imdb_data.year = Some year; _}, _), { Imdb_data.year = Some year'; _} when year' > year -> Some (elt, title)
+          | _ -> best
+        in
+        (max_edits, best)
     )
   |> function
   | (_, None) -> None
-  | (score, Some elt) ->
-    Some (elt, (1.0 -. score))
+  | (distance, Some (elt, title)) ->
+    let max_length = Int.max (String.length query) (String.length title) |> Float.of_int in
+    let score = 1.0 -. (Float.of_int distance /. Normalize.edit_distance_scale /. max_length) in
+    Some (elt, Float.max 0.0 score)
 
 
 (** Search for best matching title *)
