@@ -23,7 +23,7 @@ let split_words s =
         begin match Uucp.Gc.general_category u with
         | `Lu | `Ll | `Lt | `Lm | `Lo | `Nd ->
           let* () = yield u in inner ()
-        | `Zs ->
+        | `Zs | `Pd | `Pc ->
           let* () = yield space in inner ()
         | _ -> inner ()
         end
@@ -244,7 +244,7 @@ let%expect_test "normalize: S.H.I.E.L.D." =
 
 let%expect_test "normalize: hyphenated" =
   print_endline (normalize "Spider-Man: No Way Home" |> String.concat ~sep:" ");
-  [%expect {| spiderman no way home |}]
+  [%expect {| spider man no way home |}]
 
 let%expect_test "normalize: colon separated" =
   print_endline (normalize "Mission: Impossible" |> String.concat ~sep:" ");
