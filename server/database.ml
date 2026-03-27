@@ -70,30 +70,28 @@ let matches_year ~year entry =
     | Some year' -> year = year'
     | None -> true
 
-let jaccard_similarities xs =
-  (* Could this be done better? *)
+(** IDF weight for a token: log(N / df). Returns 1.0 for unknown tokens. *)
+let idf_weight t token =
+  match find_token t token with
+  | None -> 1.0
+  | Some posting_list ->
+    let n = Float.of_int (Array.length t.titles) in
+    let df = Float.of_int (Array.length posting_list) in
+    Float.log (n /. df)
+
+(** IDF-weighted recall: sum of IDF weights for matching tokens / sum for query tokens *)
+let weighted_recall t xs =
   let set_x = Set.of_list (module String) xs in
-  let length_x = Set.length set_x in
+  let idf = idf_weight t in
+  let sum_x = Set.sum (module Float) set_x ~f:idf in
   fun ys ->
     let set_y = Set.of_list (module String) ys in
-    let length_y = Set.length set_y in
-    let max_length = Int.max length_x length_y in
-    let inter = Set.inter set_x set_y |> Set.length in
-    let union = length_x + length_y - inter in
-    let j1 = Float.(of_int inter / of_int union) in
-    let j2 = Float.(of_int inter / of_int max_length) in
-    let j3 = Float.(of_int inter / of_int length_x) in
-    let j4 = Float.(of_int inter / of_int length_y) in
-    [| j1; j2; j3; j4 |]
+    let inter_set = Set.inter set_x set_y in
+    let sum_inter = Set.sum (module Float) inter_set ~f:idf in
+    sum_inter /. sum_x
 
-let jaccard_similarities_idx = [0;2;3]
-let jaccard_best_score scores =
-  List.map jaccard_similarities_idx ~f:(fun idx -> Array.get scores idx)
-  |> List.max_elt ~compare:Float.compare
-  |> Option.value ~default:0.0
-
-let select_best ~query ~query_tokens candidates =
-  let jaccard_similarities = jaccard_similarities query_tokens in
+let select_best t ~query ~query_tokens candidates =
+  let recall = weighted_recall t query_tokens in
   let weighted_edit_distance =
     let query_uchars = Normalize.to_uchars query in
     fun ?max_edits s ->
@@ -109,27 +107,19 @@ let select_best ~query ~query_tokens candidates =
     )
   |> List.map ~f:(fun (title, entry) ->
       let tokens = Normalize.normalize title in
-      (jaccard_similarities tokens, title, entry)
+      (recall tokens, title, entry)
     )
+  |> List.sort ~compare:(fun (s1, _, _) (s2, _, _) -> Float.compare s2 s1)
   |> (fun candidates ->
-      jaccard_similarities_idx
-      |> List.concat_map ~f:(fun idx ->
-          List.sort_and_group candidates ~compare:(fun (s1, _, _) (s2, _, _) -> Float.compare (Array.get s2 idx) (Array.get s1 idx))
-          |> List.hd
-          |> Option.value ~default:[]
-        )
+      match candidates with
+      | [] -> []
+      | (best_score, _, _) :: _ ->
+        List.take_while candidates ~f:(fun (s, _, _) -> Float.equal s best_score)
     )
   |> List.dedup_and_sort ~compare:(fun (_, _, e1) (_, _, e2) -> Int.compare e1.Imdb_data.tconst e2.Imdb_data.tconst)
-    (*
-  |> List.map ~f:(fun (scores, a, b) -> (jaccard_best_score scores, a, b))
-  |> List.max_elt ~compare:(fun (s1, _, _) (s2, _, _) -> Float.compare s1 s2)
-  |> Option.value_map ~f:(fun (_, title, b) -> (weighted_edit_distance title, Some (b, title))) ~default:(Int.max_value, None)
- *)
   |> List.map ~f:(fun (_score, title, entry) -> (title, entry))
   |> List.fold ~init:(Int.max_value, None) ~f:(fun (max_edits, best) (title, elt) ->
       let distance = weighted_edit_distance ~max_edits title in
-      (* let max_length = Int.max (String.length query) (String.length title) in *)
-      (* Stdlib.Printf.printf "%d/%d: tt%07d %s\n" distance max_length elt.Imdb_data.tconst title; *)
       match Int.compare max_edits distance with
       | -1 -> (max_edits, best)
       | 1 -> (distance, Some (elt, title))
@@ -167,6 +157,6 @@ let search t ?year ~title_types query =
       )
   in
   let num_filtered = List.length candidates in
-  select_best ~query ~query_tokens candidates
+  select_best t ~query ~query_tokens candidates
   |> Option.map ~f:(fun (entry, score) ->
       (entry, score, { candidates = total_candidates; filtered = num_filtered }))
