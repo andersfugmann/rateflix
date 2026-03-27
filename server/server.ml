@@ -86,7 +86,7 @@ let make_callback ~queue =
 (** Start the HTTP server *)
 let start ~sw ~env ~port ~queue =
   let net = Eio.Stdenv.net env in
-  let addr = `Tcp (Eio.Net.Ipaddr.V4.any, port) in
+  let addr = `Tcp (Eio.Net.Ipaddr.V6.any, port) in
   let socket = Eio.Net.listen net ~sw ~backlog:128 ~reuse_addr:true addr in
   let callback = make_callback ~queue in
   let server = Cohttp_eio.Server.make ~callback () in
