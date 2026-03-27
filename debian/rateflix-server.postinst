@@ -1,0 +1,29 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        # Create system user if it doesn't exist
+        if ! getent passwd rateflix > /dev/null 2>&1; then
+            adduser --system --group --home /var/lib/rateflix-server \
+                --no-create-home --quiet rateflix
+        fi
+
+        # Ensure data directory ownership
+        chown rateflix:rateflix /var/lib/rateflix-server
+
+        # Install cron job only when systemd timers are not available
+        if [ -d /run/systemd/system ]; then
+            rm -f /etc/cron.d/rateflix-server
+        else
+            if [ -f /usr/share/rateflix-server/rateflix-server.cron ]; then
+                cp /usr/share/rateflix-server/rateflix-server.cron /etc/cron.d/rateflix-server
+                chmod 0644 /etc/cron.d/rateflix-server
+            fi
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

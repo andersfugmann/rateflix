@@ -1,0 +1,15 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	# Binary is pre-built and provided in the package directory
+
+override_dh_auto_install:
+	install -D -m 0755 rateflix-server debian/rateflix-server/usr/bin/rateflix-server
+	install -D -m 0755 debian/rateflix-server.fetch-data debian/rateflix-server/usr/lib/rateflix-server/fetch-data
+	install -D -m 0644 debian/rateflix-server.cron.d debian/rateflix-server/usr/share/rateflix-server/rateflix-server.cron
+	install -d debian/rateflix-server/var/lib/rateflix-server
+
+override_dh_auto_test:

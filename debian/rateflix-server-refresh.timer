@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly IMDB data refresh for rateflix-server
+
+[Timer]
+OnCalendar=weekly
+RandomizedDelaySec=3600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

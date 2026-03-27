@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    purge)
+        rm -f /etc/cron.d/rateflix-server
+        rm -rf /var/lib/rateflix-server
+        if getent passwd rateflix > /dev/null 2>&1; then
+            deluser --quiet --system rateflix || true
+        fi
+        if getent group rateflix > /dev/null 2>&1; then
+            delgroup --quiet --system rateflix || true
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

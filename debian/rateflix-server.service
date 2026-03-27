@@ -1,0 +1,18 @@
+[Unit]
+Description=Rateflix IMDB rating lookup server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rateflix
+Group=rateflix
+ExecStartPre=/usr/lib/rateflix-server/fetch-data
+ExecStart=/usr/bin/rateflix-server --data-dir /var/lib/rateflix-server --port 1913
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=10
+StateDirectory=rateflix-server
+
+[Install]
+WantedBy=multi-user.target

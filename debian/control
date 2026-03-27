@@ -1,0 +1,16 @@
+Source: rateflix-server
+Section: web
+Priority: optional
+Maintainer: Anders Fugmann <anders@fugmann.net>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/andersfugmann/rateflix
+Rules-Requires-Root: no
+
+Package: rateflix-server
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, curl, gzip, ca-certificates
+Description: IMDB rating lookup server
+ HTTP service for fuzzy movie/title lookup against local IMDB data files.
+ Provides a REST endpoint that accepts title queries and returns IMDB
+ ratings using an in-memory inverted index with IDF-weighted scoring.

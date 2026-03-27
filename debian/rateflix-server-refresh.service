@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh IMDB data for rateflix-server
+
+[Service]
+Type=oneshot
+User=rateflix
+Group=rateflix
+ExecStart=/usr/lib/rateflix-server/fetch-data
+ExecStartPost=+/bin/systemctl reload rateflix-server

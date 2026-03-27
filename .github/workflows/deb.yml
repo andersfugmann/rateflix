@@ -1,0 +1,49 @@
+name: Debian package
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build-deb:
+    name: Build .deb package
+    runs-on: ubuntu-latest
+    container:
+      image: debian:unstable
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git curl ca-certificates build-essential \
+            debhelper devscripts fakeroot \
+            opam pkg-config libgmp-dev libev-dev libffi-dev
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up OCaml
+        run: |
+          opam init --bare --yes --disable-sandboxing
+          opam switch create 5.4.0 --yes
+          eval $(opam env)
+          opam install . --deps-only --yes
+
+      - name: Build server binary
+        run: |
+          eval $(opam env)
+          dune build --profile=release server/rateflix_server.exe
+          cp _build/default/server/rateflix_server.exe rateflix-server
+
+      - name: Build Debian package
+        run: |
+          dpkg-buildpackage -us -uc -b
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rateflix-server-deb
+          path: ../rateflix-server_*.deb

@@ -1,0 +1,77 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          rateflix-server
+# Required-Start:    $remote_fs $network
+# Required-Stop:     $remote_fs $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Rateflix IMDB rating lookup server
+# Description:       HTTP service for fuzzy movie/title lookup against
+#                    local IMDB data files.
+### END INIT INFO
+
+NAME=rateflix-server
+DAEMON=/usr/bin/rateflix-server
+PIDFILE=/run/rateflix-server/rateflix-server.pid
+DATA_DIR=/var/lib/rateflix-server
+PORT=1913
+USER=rateflix
+GROUP=rateflix
+
+. /lib/lsb/init-functions
+
+do_start() {
+    # Ensure data files exist
+    su -s /bin/sh "$USER" -c "/usr/lib/rateflix-server/fetch-data"
+
+    mkdir -p "$(dirname "$PIDFILE")"
+    chown "$USER:$GROUP" "$(dirname "$PIDFILE")"
+
+    start-stop-daemon --start --quiet --background \
+        --make-pidfile --pidfile "$PIDFILE" \
+        --chuid "$USER:$GROUP" \
+        --exec "$DAEMON" -- --data-dir "$DATA_DIR" --port "$PORT"
+}
+
+do_stop() {
+    start-stop-daemon --stop --quiet --pidfile "$PIDFILE" \
+        --retry=TERM/30/KILL/5
+    rm -f "$PIDFILE"
+}
+
+do_reload() {
+    start-stop-daemon --stop --signal HUP --quiet --pidfile "$PIDFILE"
+}
+
+case "$1" in
+    start)
+        log_daemon_msg "Starting $NAME"
+        do_start
+        log_end_msg $?
+        ;;
+    stop)
+        log_daemon_msg "Stopping $NAME"
+        do_stop
+        log_end_msg $?
+        ;;
+    restart|force-reload)
+        log_daemon_msg "Restarting $NAME"
+        do_stop
+        do_start
+        log_end_msg $?
+        ;;
+    reload)
+        log_daemon_msg "Reloading $NAME"
+        do_reload
+        log_end_msg $?
+        ;;
+    status)
+        status_of_proc -p "$PIDFILE" "$DAEMON" "$NAME" && exit 0 || exit $?
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|force-reload|reload|status}"
+        exit 1
+        ;;
+esac
+
+exit 0

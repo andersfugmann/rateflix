@@ -1,0 +1,39 @@
+#!/bin/sh
+# Download IMDB data files if missing or when called for refresh.
+# Removes the index cache so the server rebuilds it on next load.
+
+set -e
+
+DATA_DIR=/var/lib/rateflix-server
+BASE_URL=https://datasets.imdbws.com
+
+download() {
+    local file="$1"
+    local url="${BASE_URL}/${file}.gz"
+    local dest="${DATA_DIR}/${file}"
+    local tmp="${dest}.tmp"
+
+    curl -fsSL "$url" | gzip -d > "$tmp"
+    mv "$tmp" "$dest"
+}
+
+mkdir -p "$DATA_DIR"
+
+needs_download=false
+for f in title.basics.tsv title.ratings.tsv; do
+    if [ ! -f "${DATA_DIR}/${f}" ]; then
+        needs_download=true
+        break
+    fi
+done
+
+# When called with --force, always re-download
+if [ "${1}" = "--force" ]; then
+    needs_download=true
+fi
+
+if [ "$needs_download" = true ]; then
+    download title.basics.tsv
+    download title.ratings.tsv
+    rm -f "${DATA_DIR}/index.cache"
+fi
