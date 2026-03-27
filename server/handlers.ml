@@ -14,8 +14,12 @@ let lookup_one state (query : Rateflix_types.query) : Rateflix_types.search_resu
         imdb_id = "";
         title_type = Rateflix_types.Unknown;
         match_score = 0.0 }, None
-  | Some (entry, score, stats) ->
-      { Rateflix_types.title = entry.Imdb_data.primary_title;
+  | Some (title_match, entry, score, stats) ->
+      let title = match title_match with
+        | Database.Primary -> entry.Imdb_data.primary_title
+        | Database.Secondary -> entry.Imdb_data.secondary_title
+      in
+      { Rateflix_types.title;
         year = entry.Imdb_data.year;
         imdb_rating = entry.Imdb_data.rating;
         imdb_id = Printf.sprintf "tt%07d" entry.Imdb_data.tconst;

@@ -7,6 +7,8 @@ type t = {
   inverted_index: (string * int array) array;
 } [@@deriving bin_io]
 
+type title = Primary | Secondary
+
 type search_stats = {
   candidates: int;
   filtered: int;
@@ -99,44 +101,44 @@ let select_best t ~query ~query_tokens candidates =
   in
   candidates
   |> List.concat_map ~f:(fun ({ Imdb_data.primary_title; secondary_title; _ } as entry) ->
-      let res = [primary_title, entry] in
+      let res = [Primary, primary_title, entry] in
       match String.equal primary_title secondary_title with
       | true -> res
       | false ->
-        (secondary_title, entry) :: res
+        (Secondary, secondary_title, entry) :: res
     )
-  |> List.map ~f:(fun (title, entry) ->
+  |> List.map ~f:(fun (kind, title, entry) ->
       let tokens = Normalize.normalize title in
-      (recall tokens, title, entry)
+      (recall tokens, kind, title, entry)
     )
-  |> List.sort ~compare:(fun (s1, _, _) (s2, _, _) -> Float.compare s2 s1)
+  |> List.sort ~compare:(fun (s1, _, _, _) (s2, _, _, _) -> Float.compare s2 s1)
   |> (fun candidates ->
       match candidates with
       | [] -> []
-      | (best_score, _, _) :: _ ->
-        List.take_while candidates ~f:(fun (s, _, _) -> Float.equal s best_score)
+      | (best_score, _, _, _) :: _ ->
+        List.take_while candidates ~f:(fun (s, _, _, _) -> Float.equal s best_score)
     )
-  |> List.dedup_and_sort ~compare:(fun (_, _, e1) (_, _, e2) -> Int.compare e1.Imdb_data.tconst e2.Imdb_data.tconst)
-  |> List.map ~f:(fun (_score, title, entry) -> (title, entry))
-  |> List.fold ~init:(Int.max_value, None) ~f:(fun (max_edits, best) (title, elt) ->
+  |> List.dedup_and_sort ~compare:(fun (_, _, _, e1) (_, _, _, e2) -> Int.compare e1.Imdb_data.tconst e2.Imdb_data.tconst)
+  |> List.map ~f:(fun (_score, kind, title, entry) -> (kind, title, entry))
+  |> List.fold ~init:(Int.max_value, None) ~f:(fun (max_edits, best) (kind, title, elt) ->
       let distance = weighted_edit_distance ~max_edits title in
       match Int.compare max_edits distance with
       | -1 -> (max_edits, best)
-      | 1 -> (distance, Some (elt, title))
+      | 1 -> (distance, Some (kind, elt, title))
       | _ (* 0 *) ->
         let best =
           match best, elt with
-          | Some ({ Imdb_data.year = Some year; _}, _), { Imdb_data.year = Some year'; _} when year' > year -> Some (elt, title)
+          | Some (_, { Imdb_data.year = Some year; _}, _), { Imdb_data.year = Some year'; _} when year' > year -> Some (kind, elt, title)
           | _ -> best
         in
         (max_edits, best)
     )
   |> function
   | (_, None) -> None
-  | (distance, Some (elt, title)) ->
+  | (distance, Some (kind, elt, title)) ->
     let max_length = Int.max (String.length query) (String.length title) |> Float.of_int in
     let score = 1.0 -. (Float.of_int distance /. Normalize.edit_distance_scale /. max_length) in
-    Some (elt, Float.max 0.0 score)
+    Some (kind, elt, Float.max 0.0 score)
 
 
 (** Search for best matching title *)
@@ -158,5 +160,5 @@ let search t ?year ~title_types query =
   in
   let num_filtered = List.length candidates in
   select_best t ~query ~query_tokens candidates
-  |> Option.map ~f:(fun (entry, score) ->
-      (entry, score, { candidates = total_candidates; filtered = num_filtered }))
+  |> Option.map ~f:(fun (title_match, entry, score) ->
+      (title_match, entry, score, { candidates = total_candidates; filtered = num_filtered }))
