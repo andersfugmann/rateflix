@@ -237,3 +237,15 @@ let%expect_test "normalize: lowercase roman iii not replaced" =
 let%expect_test "normalize: roman IV in context" =
   print_endline (normalize "Star Wars Episode IV" |> String.concat ~sep:" ");
   [%expect {| star wars episode 4 |}]
+
+let%expect_test "normalize: S.H.I.E.L.D." =
+  print_endline (normalize "Agents of S.H.I.E.L.D." |> String.concat ~sep:" ");
+  [%expect {| agents of shield |}]
+
+let%expect_test "normalize: hyphenated" =
+  print_endline (normalize "Spider-Man: No Way Home" |> String.concat ~sep:" ");
+  [%expect {| spiderman no way home |}]
+
+let%expect_test "normalize: colon separated" =
+  print_endline (normalize "Mission: Impossible" |> String.concat ~sep:" ");
+  [%expect {| mission impossible |}]
