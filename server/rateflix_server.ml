@@ -40,7 +40,7 @@ let save_cache ~fs data_dir (state : Handlers.state) =
 let load_from_tsv ~fs ~data_dir =
   let titles =
     let filter = function
-      | { Imdb_data.title_type = Types.(Short | VideoGame | TvEpisode); _ } -> false
+      | { Imdb_data.title_type = Types.(Short | VideoGame | TvEpisode | TvSpecial | Video); _ } -> false
       | _ -> true
     in
     Imdb_data.read ~filter Eio.Path.(fs / data_dir)
