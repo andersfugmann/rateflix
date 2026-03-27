@@ -1,0 +1,4 @@
+(executable
+ (name test_server)
+ (libraries rateflix_types cohttp-eio eio eio_main yojson)
+ (preprocess (pps ppx_deriving_yojson)))

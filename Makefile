@@ -50,7 +50,7 @@ run:
 .PHONY: test-server
 test-server: ## Run fuzzy search tests against the server
 test-server:
-	@./test/test_fuzzy.sh
+	@dune exec test/test_server.exe
 
 .PHONY: plugin
 plugin: ## Create the plugin directory via dune alias
