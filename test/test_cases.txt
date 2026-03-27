@@ -164,8 +164,8 @@ Zootropolis 2 | tt26443597 | 2025 | movie | UK title
 The Lost World: Jurassic Park | tt0119567 | 1997 | movie | The Lost World: Jurassic Park
 Jurassic Park 2 - The Lost World | tt0119567 | 1997 | movie | Alternate title ordering
 Take the Ball, Pass the Ball | tt9135854 | 2018 | movie | Full title with subtitle
-Gold Divers | tt4179538 | | tvSeries | Gold Divers Under the Ice | XFAIL
+Gold Divers | tt4179538 | | tvSeries | Gold Divers Under the Ice
 Ballerina | tt7181546 | 2025 | movie | Ballerina
 Indiana Jones and the Raiders Of The Lost Ark | tt0082971 | | movie | Raiders of the Lost Ark
-JACKASS 3 | tt1116184 | | movie | Jackass 3D | XFAIL
+JACKASS 3 | tt1116184 | | movie | Jackass 3D
 Battlestar Galactica - The Mini Series | tt0314979 | | tvMiniSeries | Battlestar Galactica (2003) | XFAIL
