@@ -5,7 +5,7 @@ open Bin_prot.Std
 
 type title_entry = {
   tconst: int;
-  title_type: Types.title_type;
+  title_type: Rateflix_types.title_type;
   primary_title: string;
   secondary_title: string;
   year: int option;
@@ -21,17 +21,17 @@ let parse_tconst s =
 let parse_int field =
   match Int.of_string_opt field with
   | Some n -> n
-  | None -> raise (Types.Parse_error (Printf.sprintf "Invalid int: %s" field))
+  | None -> raise (Rateflix_types.Parse_error (Printf.sprintf "Invalid int: %s" field))
 
 let parse_float field =
   match Float.of_string_opt field with
   | Some f -> f
-  | None -> raise (Types.Parse_error (Printf.sprintf "Invalid float: %s" field))
+  | None -> raise (Rateflix_types.Parse_error (Printf.sprintf "Invalid float: %s" field))
 
 (** Parse title.basics.tsv row *)
 type title_basics = {
   b_tconst: int;
-  b_title_type: Types.title_type;
+  b_title_type: Rateflix_types.title_type;
   b_primary_title: string;
   b_secondary_title: string;
   b_start_year: int option;
@@ -40,10 +40,10 @@ type title_basics = {
 let parse_basics_row = function
   | b_tconst :: entry_type :: b_primary_title :: b_secondary_title :: _ :: start_year :: _ ->
     (match parse_tconst b_tconst with
-     | Some id -> Some { b_tconst = id; b_title_type = Types.title_type_of_string entry_type; b_primary_title; b_secondary_title; b_start_year = Int.of_string_opt start_year }
+     | Some id -> Some { b_tconst = id; b_title_type = Rateflix_types.title_type_of_string entry_type; b_primary_title; b_secondary_title; b_start_year = Int.of_string_opt start_year }
      | None -> None)
   | l -> let s = String.concat ~sep:"; " l in Stdlib.Printf.printf "Could not parse [ %s ]\n" s; None
-(* raise (Types.Parse_error (Printf.sprintf "Invalid basics row with %d fields" (List.length row))) *)
+(* raise (Rateflix_types.Parse_error (Printf.sprintf "Invalid basics row with %d fields" (List.length row))) *)
 
 (** Parse title.ratings.tsv row *)
 type title_rating = {
@@ -58,7 +58,7 @@ let parse_rating_row = function
        | Some id -> Some { r_tconst = id; r_average_rating = parse_float rating; r_num_votes = parse_int votes }
        | None -> None)
   | l -> let s = String.concat ~sep:"; " l in Stdlib.Printf.printf "Could not parse [ %s ]\n" s; None
-(* raise (Types.Parse_error (Printf.sprintf "Invalid rating row with %d fields" (List.length row))) *)
+(* raise (Rateflix_types.Parse_error (Printf.sprintf "Invalid rating row with %d fields" (List.length row))) *)
 
 (** Read imdb titles and ratings *)
 let read ~filter dir =

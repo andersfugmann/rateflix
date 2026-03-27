@@ -5,13 +5,21 @@
  (inline_tests)
  (preprocess (pps ppx_expect)))
 
+(library
+ (name rateflix_types)
+ (public_name rateflix-server.types)
+ (modules rateflix_types)
+ (libraries yojson bin_prot)
+ (preprocess (pps ppx_deriving_yojson ppx_bin_prot)))
+
 (executable
  (name rateflix_server)
  (public_name rateflix-server)
  (package rateflix-server)
- (modules :standard \ normalize)
+ (modules :standard \ normalize rateflix_types)
  (libraries
    normalize
+   rateflix_types
    cohttp-eio
    eio
    eio_main

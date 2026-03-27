@@ -1,9 +1,9 @@
 (** HTTP server using Cohttp-eio *)
 
-type work_queue = (Types.query * (Types.search_result * Database.search_stats option * float) Eio.Promise.u) Eio.Stream.t
+type work_queue = (Rateflix_types.query * (Rateflix_types.search_result * Database.search_stats option * float) Eio.Promise.u) Eio.Stream.t
 
 (** Post queries to worker queue and await results *)
-let lookup ~queue (request : Types.request) =
+let lookup ~queue (request : Rateflix_types.request) =
   let promises =
     request
     |> List.map (fun query ->
@@ -23,7 +23,7 @@ let client_addr conn =
 
 (** Log a response line for each query/result pair *)
 let log_response addr responses =
-  List.iter (fun ((query : Types.query), (result : Types.search_result), stats, elapsed_ms) ->
+  List.iter (fun ((query : Rateflix_types.query), (result : Rateflix_types.search_result), stats, elapsed_ms) ->
     let year_str = match query.year with
       | Some y -> Printf.sprintf " (%d)" y
       | None -> ""
@@ -45,14 +45,14 @@ let log_response addr responses =
 let handle_request ~queue ~addr body =
   body
   |> Yojson.Safe.from_string
-  |> Types.request_of_yojson
+  |> Rateflix_types.request_of_yojson
   |> function
      | Ok request ->
          let results = lookup ~queue request in
          log_response addr results;
          let response = List.map (fun (q, r, _, _) -> (q, r)) results in
          response
-         |> Types.response_to_yojson
+         |> Rateflix_types.response_to_yojson
          |> Yojson.Safe.to_string
          |> Option.some
      | Error _ -> None
