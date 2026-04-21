@@ -83,13 +83,24 @@ let make_callback ~queue =
     | _ ->
         Cohttp_eio.Server.respond ~status:`Not_found ~body:(Cohttp_eio.Body.of_string "Not found") ()
 
-(** Start the HTTP server *)
+(** Start the HTTP server on both IPv6 and IPv4 *)
 let start ~sw ~env ~port ~queue =
   let net = Eio.Stdenv.net env in
-  let addr = `Tcp (Eio.Net.Ipaddr.V6.any, port) in
-  let socket = Eio.Net.listen net ~sw ~backlog:128 ~reuse_addr:true addr in
   let callback = make_callback ~queue in
   let server = Cohttp_eio.Server.make ~callback () in
-  Printf.printf "Server listening on port %d\n%!" port;
-  Cohttp_eio.Server.run socket server ~on_error:(fun ex ->
-    Printf.eprintf "Server error: %s\n%!" (Printexc.to_string ex))
+  let on_error ex =
+    Printf.eprintf "Server error: %s\n%!" (Printexc.to_string ex)
+  in
+  let listen addr =
+    let socket = Eio.Net.listen net ~sw ~backlog:128 ~reuse_addr:true addr in
+    Cohttp_eio.Server.run socket server ~on_error
+  in
+  let v6_addr = `Tcp (Eio.Net.Ipaddr.V6.any, port) in
+  let v4_addr = `Tcp (Eio.Net.Ipaddr.V4.any, port) in
+  Printf.printf "Server listening on port %d (IPv4 and IPv6)\n%!" port;
+  Eio.Fiber.both
+    (fun () -> listen v6_addr)
+    (fun () ->
+       try listen v4_addr
+       with exn ->
+         Printf.eprintf "IPv4 listener failed: %s (continuing with IPv6 only)\n%!" (Printexc.to_string exn))

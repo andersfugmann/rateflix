@@ -27,7 +27,7 @@ type request = query_json list [@@deriving yojson]
 [@@@warning "+39"]
 
 let server_host_key = "serverHost"
-let default_server_host = "rateflix:1913"
+let default_server_host = "rateflix.fugmann.net:1913"
 
 (** Parse IMDb rating string to float option *)
 let parse_rating rating = if Float.equal rating 0.0 then None else Some rating

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Rateflix",
   "version": "0.9",
-  "description": "Adds IMDb scores to streaming services using omdb",
+  "description": "Adds IMDb rating overlays to streaming services",
   "content_scripts": [
     {
       "matches": ["*://www.netflix.com/*"],
@@ -41,5 +41,5 @@
     "128": "icons/icon128.png"
   },
   "permissions": [ "storage" ],
-  "host_permissions": [ "http://*/*" ]
+  "host_permissions": [ "http://rateflix.fugmann.net:1913/*" ]
 }
