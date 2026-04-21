@@ -83,13 +83,19 @@ let make_callback ~queue =
     | _ ->
         Cohttp_eio.Server.respond ~status:`Not_found ~body:(Cohttp_eio.Body.of_string "Not found") ()
 
-(** Start the HTTP server on a dual-stack socket (IPv4 and IPv6) *)
+(** Start the HTTP server on both IPv4 and IPv6 *)
 let start ~sw ~env ~port ~queue =
   let net = Eio.Stdenv.net env in
-  let addr = `Tcp (Eio.Net.Ipaddr.V6.any, port) in
-  let socket = Eio.Net.listen net ~sw ~backlog:128 ~reuse_addr:true addr in
   let callback = make_callback ~queue in
   let server = Cohttp_eio.Server.make ~callback () in
-  Printf.printf "Server listening on port %d\n%!" port;
-  Cohttp_eio.Server.run socket server ~on_error:(fun ex ->
-    Printf.eprintf "Server error: %s\n%!" (Printexc.to_string ex))
+  let on_error ex =
+    Printf.eprintf "Server error: %s\n%!" (Printexc.to_string ex)
+  in
+  let listen addr =
+    let socket = Eio.Net.listen net ~sw ~backlog:128 ~reuse_addr:true addr in
+    Cohttp_eio.Server.run socket server ~on_error
+  in
+  Printf.printf "Server listening on port %d (IPv4 and IPv6)\n%!" port;
+  Eio.Fiber.both
+    (fun () -> listen (`Tcp (Eio.Net.Ipaddr.V6.any, port)))
+    (fun () -> listen (`Tcp (Eio.Net.Ipaddr.V4.any, port)))
