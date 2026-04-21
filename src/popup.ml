@@ -125,16 +125,18 @@ let run () =
   List.iter (setup_transparency_slider ~callback)
     [slider_beta_key; slider_low_key; slider_high_key; slider_max_key];
 
-  let apikey_el = getElementById_coerce "apikey" CoerceTo.input |> Option.get in
+  let host_el = getElementById_coerce "server-host" CoerceTo.input |> Option.get in
   let status_el = getElementById "status" in
-  let apikey_save_el = getElementById "apikey-save" in
+  let host_save_el = getElementById "server-host-save" in
 
-  Dom_html.addEventListener apikey_save_el Dom_html.Event.click
+  Dom_html.addEventListener host_save_el Dom_html.Event.click
     (Dom_html.handler
        (fun _ ->
-          let key = Js.to_string apikey_el##.value |> String.trim in
-          Lwt.ignore_result @@ Lib.Storage.save_key Lib.Omdb.omdb_key key;
-          show_status status_el "Api key saved";
+          let host = Js.to_string host_el##.value |> String.trim in
+          let host = if String.length host = 0 then Lib.Rateflix_client.default_server_host else host in
+          Lwt.ignore_result @@ Lib.Storage.save_key Lib.Rateflix_client.server_host_key host;
+          host_el##.value := (Js.string host);
+          show_status status_el "Server host saved";
           Js._false
        )) Js._false
   |> ignore;
@@ -143,14 +145,9 @@ let run () =
   let* () = setup_save_button status_el in
   let* () = setup_reset_button status_el in
 
-  let* key = Lib.Storage.load_key Lib.Omdb.omdb_key in
-  begin
-    match key with
-    | Some key ->
-      apikey_el##.value := (Js.string key);
-      show_status status_el "Api key loaded"
-    | None -> ()
-  end;
+  let* host = Lib.Storage.load_key Lib.Rateflix_client.server_host_key in
+  let host = Option.value ~default:Lib.Rateflix_client.default_server_host host in
+  host_el##.value := (Js.string host);
   Lwt.return_unit
 
 

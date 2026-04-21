@@ -12,7 +12,7 @@
 
 (library
  (name        lib)
- (modules     omdb rateflix_client storage chrome plugin log transparency backend)
+ (modules     rateflix_client storage chrome plugin log transparency backend)
  (libraries js_of_ocaml js_of_ocaml-lwt)
  (js_of_ocaml
   (flags --opt 3 --target-env browser)

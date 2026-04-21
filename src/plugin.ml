@@ -6,7 +6,7 @@ open! StdLabels
 open! ListLabels
 open! MoreLabels
 
-(** Set to true to not call omdb, but return a rating derived from the title *)
+(** Set to true to not call the server, but return a rating derived from the title *)
 let debug = false
 
 (** Add custom CSS for rating badges *)
@@ -213,7 +213,7 @@ let get_rating ?year title =
     in
     match result with
     | Ok (Some rating) ->
-      Log.log `Debug "Fetched rating from OMDb: %.1f: %s" rating title;
+      Log.log `Debug "Fetched rating: %.1f: %s" rating title;
       let* () = Storage.save_rating ~title ?year ~rating:(Some rating) () in
       Lwt.return (Some rating)
     | Ok None ->

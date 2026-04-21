@@ -26,15 +26,18 @@ type request = query_json list [@@deriving yojson]
 
 [@@@warning "+39"]
 
-let server_url = "http://127.0.0.1:1913"
+let server_host_key = "serverHost"
+let default_server_host = "rateflix:1913"
 
 (** Parse IMDb rating string to float option *)
 let parse_rating rating = if Float.equal rating 0.0 then None else Some rating
 
 let fetch_imdb_rating ?year title : (float option, _) Lwt_result.t =
+  let* host = Storage.load_key server_host_key in
+  let host = Option.value ~default:default_server_host host in
   let query = { q_title = title; q_year = year } in
   let payload = request_to_yojson [query] |> Yojson.Safe.to_string in
-  let url = Printf.sprintf "%s/lookup" server_url in
+  let url = Printf.sprintf "http://%s/lookup" host in
   let* frame =
     XmlHttpRequest.perform_raw
       ~response_type:Text

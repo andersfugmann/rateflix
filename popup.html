@@ -129,19 +129,19 @@
       color: var(--primary-dark);
       font-size: 1em;
     }
-    .form-group.omdb-key-group {
+    .form-group.server-host-group {
       display: flex;
       align-items: center;
       gap: 0;
       margin-bottom: 18px;
     }
-    .form-group.omdb-key-group input[type="text"] {
+    .form-group.server-host-group input[type="text"] {
       border-top-right-radius: 0;
       border-bottom-right-radius: 0;
       margin-bottom: 0;
       border-right: none;
     }
-    .form-group.omdb-key-group button[type="submit"] {
+    .form-group.server-host-group button[type="submit"] {
       border-top-left-radius: 0;
       border-bottom-left-radius: 0;
       margin-top: 0;
@@ -156,7 +156,7 @@
       font-weight: 600;
       transition: background 0.2s, transform 0.1s;
     }
-    .form-group.omdb-key-group button[type="submit"]:hover {
+    .form-group.server-host-group button[type="submit"]:hover {
       background: var(--primary-dark);
       transform: translateY(-2px) scale(1.03);
     }
@@ -212,10 +212,10 @@
   <span class="header-title">Rateflix</span>
   </div>
   <div class="card">
-    <h3>OMDb API Key</h3>
+    <h3>Server Host</h3>
     <div class="form-group omdb-key-group">
-      <input type="text" id="apikey" name="apikey" placeholder="Enter your OMDb API key" required />
-      <button id="apikey-save" type="submit">Save</button>
+      <input type="text" id="server-host" name="server-host" placeholder="host:port" />
+      <button id="server-host-save" type="submit">Save</button>
     </div>
   </div>
   <div class="card">
