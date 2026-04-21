@@ -34,9 +34,16 @@
  (description "HTTP service for fuzzy movie/title lookup against local IMDB data files.")
  (depends
    ocaml
+   base
+   bin_prot
+   ppx_bin_prot
    cohttp-eio
    eio
    eio_main
+   tls-eio
+   ca-certs
+   mirage-crypto-rng
+   decompress
    uutf
    uunf
    uucp
