@@ -54,6 +54,7 @@ jobs:
 
       - name: Archive plugin
         id: plugin
+        shell: bash
         run: |
           SHORT_SHA=${GITHUB_SHA::7}
           ARCHIVE_NAME="rateflix-plugin-${SHORT_SHA}.tar.gz"
