@@ -17,4 +17,7 @@ override_dh_auto_install:
 	install -D -m 0644 debian/rateflix-server.nginx.conf debian/rateflix-server/usr/share/doc/rateflix-server/examples/nginx-rateflix.conf
 	install -d debian/rateflix-server/var/lib/rateflix-server
 
+override_dh_strip:
+	dh_strip --no-automatic-dbgsym
+
 override_dh_auto_test:
