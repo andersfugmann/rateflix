@@ -19,7 +19,7 @@ jobs:
             git curl ca-certificates build-essential \
             debhelper devscripts fakeroot \
             opam pkg-config libgmp-dev libev-dev libffi-dev \
-            imagemagick
+            imagemagick librsvg2-bin
 
       - name: Checkout repository
         uses: actions/checkout@v4
