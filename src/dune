@@ -1,7 +1,7 @@
 (executables
  (names netflix prime hbomax appletv popup disneyplus)
  (modes js)
- (modules :standard \ omdb rateflix_client storage chrome plugin log transparency backend)
+ (modules :standard \ rateflix_client storage chrome plugin log transparency backend)
  (js_of_ocaml
   (flags --opt 3 --target-env browser)
   ;(compilation_mode whole_program)

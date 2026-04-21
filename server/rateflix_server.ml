@@ -71,23 +71,19 @@ let load_data ~fs ~data_dir =
   | false ->
     from_tsv ()
 
-(** Download missing TSV files via HTTPS + gzip decompression.
-    Returns true if all files are present afterwards. *)
-let download_missing ~env ~sw ~data_dir =
-  let missing = List.filter (fun f ->
-    not (Sys.file_exists (Filename.concat data_dir f))
-  ) tsv_filenames in
-  match missing with
+(** Download the given TSV files via HTTPS + gzip decompression.
+    Returns true on success, false on failure (cleans up partial downloads). *)
+let download_files ~env ~sw ~data_dir filenames =
+  match filenames with
   | [] -> true
-  | to_download ->
-    Printf.printf "Missing data files: %s\n%!"
-      (String.concat ", " to_download);
+  | _ ->
+    Printf.printf "Downloading: %s\n%!" (String.concat ", " filenames);
     let client, sw = Download.make_client ~sw ~env in
     (try
        List.iter (fun filename ->
          let out_path = Filename.concat data_dir filename in
          Download.fetch_tsv ~env ~sw ~client ~out_path filename
-       ) to_download;
+       ) filenames;
        Printf.printf "Download complete\n%!";
        true
      with exn ->
@@ -95,28 +91,29 @@ let download_missing ~env ~sw ~data_dir =
        List.iter (fun filename ->
          let tmp = Filename.concat data_dir (filename ^ ".tmp") in
          try Sys.remove tmp with _ -> ()
-       ) to_download;
+       ) filenames;
        false)
 
-(** Download fresh IMDB data via HTTPS, replace existing files, and reload. *)
+(** Download any missing TSV files. Returns true if all files are present. *)
+let download_missing ~env ~sw ~data_dir =
+  let missing = List.filter (fun f ->
+    not (Sys.file_exists (Filename.concat data_dir f))
+  ) tsv_filenames in
+  download_files ~env ~sw ~data_dir missing
+
+(** Download fresh IMDB data and reload the index. *)
 let download_and_reload ~sw ~env ~fs ~data_dir ~state_ref =
   Printf.printf "Downloading fresh IMDB data...\n%!";
-  let client, sw = Download.make_client ~sw ~env in
-  (try
-     List.iter (fun filename ->
-       let out_path = Filename.concat data_dir filename in
-       Download.fetch_tsv ~env ~sw ~client ~out_path filename
-     ) tsv_filenames;
-     (try Sys.remove (cache_path data_dir) with _ -> ());
-     Printf.printf "Download complete, reloading...\n%!";
-     let new_state = load_from_tsv ~fs ~data_dir in
-     save_cache ~fs data_dir new_state;
-     Atomic.set state_ref new_state;
-     Gc.compact ();
-     Printf.printf "Reload complete\n%!"
-   with exn ->
-     Printf.printf "Download failed: %s, keeping existing data\n%!"
-       (Printexc.to_string exn))
+  match download_files ~env ~sw ~data_dir tsv_filenames with
+  | false ->
+    Printf.printf "Download failed, keeping existing data\n%!"
+  | true ->
+    (try Sys.remove (cache_path data_dir) with _ -> ());
+    Printf.printf "Reloading...\n%!";
+    let new_state = load_data ~fs ~data_dir in
+    Atomic.set state_ref new_state;
+    Gc.compact ();
+    Printf.printf "Reload complete\n%!"
 
 (** Start worker domains that process queries from the queue *)
 let start_workers ~sw ~dm ~state_ref ~queue =
