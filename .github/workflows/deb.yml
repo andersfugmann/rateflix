@@ -9,6 +9,8 @@ jobs:
   build-deb:
     name: Build .deb package
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     container:
       image: debian:unstable
     steps:
@@ -54,13 +56,16 @@ jobs:
           cp -a _build/default/plugin_build rateflix-plugin
 
       - name: Archive plugin
-        id: plugin
+        id: package
         shell: bash
         run: |
           SHORT_SHA=${GITHUB_SHA::7}
-          ARCHIVE_NAME="rateflix-plugin-${SHORT_SHA}.tar.gz"
-          tar -czf "$ARCHIVE_NAME" rateflix-plugin
-          echo "archive_name=$ARCHIVE_NAME" >> "$GITHUB_OUTPUT"
+          VERSION=$(dpkg-parsechangelog -S Version)
+          PLUGIN_ARCHIVE="rateflix-plugin-${VERSION}.tar.gz"
+          tar -czf "$PLUGIN_ARCHIVE" rateflix-plugin
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "plugin_archive=$PLUGIN_ARCHIVE" >> "$GITHUB_OUTPUT"
 
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
@@ -72,4 +77,20 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rateflix-plugin
-          path: ${{ steps.plugin.outputs.archive_name }}
+          path: ${{ steps.package.outputs.plugin_archive }}
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.package.outputs.version }}
+          name: Rateflix ${{ steps.package.outputs.version }}
+          body: |
+            Automated release for commit ${{ github.sha }}.
+
+            **Debian package** (unstable): install with `sudo dpkg -i rateflix-server_${{ steps.package.outputs.version }}_amd64.deb`
+            **Browser plugin**: extract the tarball and load in Chrome via `chrome://extensions` with Developer mode enabled.
+          files: |
+            rateflix-server_*.deb
+            ${{ steps.package.outputs.plugin_archive }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
