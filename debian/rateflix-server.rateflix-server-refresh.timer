@@ -1,8 +1,8 @@
 [Unit]
-Description=Weekly IMDB data refresh for rateflix-server
+Description=Daily IMDB data refresh for rateflix-server
 
 [Timer]
-OnCalendar=weekly
+OnCalendar=daily
 RandomizedDelaySec=3600
 Persistent=true
 
