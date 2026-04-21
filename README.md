@@ -91,10 +91,33 @@ The server listens on all interfaces (IPv4 and IPv6) on the specified port.
 
 ## Configuring the server address in the plugin
 
-The plugin connects to the rating server at `rateflix:1913` by default. To change this:
+The plugin connects to the rating server at `127.0.0.1:1913` by default, which works for a locally running server.
+
+To change the server address:
 
 1. Click the Rateflix extension icon in your browser toolbar
-2. In the **Server Host** field, enter the address as `host:port` (e.g. `127.0.0.1:1913` or `myserver.local:8080`)
+2. In the **Server Host** field, enter the address (e.g. `127.0.0.1:1913` or `https://rateflix.example.com`)
 3. Click **Save**
 
-> **Note:** If you change the server host to a different origin, you may need to update `host_permissions` in `manifest.json` to match (e.g. `"http://myserver.local:8080/*"`).
+The field accepts `host:port` (uses `http://`) or a full URL with protocol (`https://host:port`).
+
+### Remote server with HTTPS
+
+Browsers block plain HTTP requests from HTTPS pages (mixed content), so a remote server must be accessed over HTTPS. The simplest approach is to put an nginx reverse proxy in front of the rateflix server:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name rateflix.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/rateflix.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/rateflix.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:1913;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+Then configure the plugin with `https://rateflix.example.com`.
