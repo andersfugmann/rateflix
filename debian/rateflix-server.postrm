@@ -4,6 +4,10 @@ set -e
 case "$1" in
     purge)
         rm -f /etc/cron.d/rateflix-server
+        if [ -d /run/systemd/system ]; then
+            systemctl stop rateflix-server-refresh.timer 2>/dev/null || true
+            systemctl disable rateflix-server-refresh.timer 2>/dev/null || true
+        fi
         rm -rf /var/lib/rateflix-server
         if getent passwd rateflix > /dev/null 2>&1; then
             deluser --quiet --system rateflix || true
