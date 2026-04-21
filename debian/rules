@@ -3,6 +3,9 @@
 %:
 	dh $@
 
+override_dh_auto_clean:
+	# Skip clean; binary is pre-built outside debhelper
+
 override_dh_auto_build:
 	# Binary is pre-built and provided in the package directory
 
