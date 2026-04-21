@@ -4,10 +4,11 @@
 	dh $@
 
 override_dh_auto_clean:
-	# Skip clean; binary is pre-built outside debhelper
+	dune clean || true
 
 override_dh_auto_build:
-	# Binary is pre-built and provided in the package directory
+	dune build --profile=release server/rateflix_server.exe
+	cp _build/default/server/rateflix_server.exe rateflix-server
 
 override_dh_auto_install:
 	install -D -m 0755 rateflix-server debian/rateflix-server/usr/bin/rateflix-server
