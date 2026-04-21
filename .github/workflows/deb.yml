@@ -18,12 +18,16 @@ jobs:
           apt-get install -y --no-install-recommends \
             git curl ca-certificates build-essential \
             debhelper devscripts fakeroot \
-            opam pkg-config libgmp-dev libev-dev libffi-dev
+            opam pkg-config libgmp-dev libev-dev libffi-dev \
+            imagemagick
 
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Mark workspace as safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Set up OCaml
         run: |
@@ -42,8 +46,28 @@ jobs:
         run: |
           dpkg-buildpackage -us -uc -b
 
+      - name: Build plugin bundle
+        run: |
+          eval $(opam env)
+          dune build --profile=release @plugin
+          cp -a _build/default/plugin_build rateflix-plugin
+
+      - name: Archive plugin
+        id: plugin
+        run: |
+          SHORT_SHA=${GITHUB_SHA::7}
+          ARCHIVE_NAME="rateflix-plugin-${SHORT_SHA}.tar.gz"
+          tar -czf "$ARCHIVE_NAME" rateflix-plugin
+          echo "archive_name=$ARCHIVE_NAME" >> "$GITHUB_OUTPUT"
+
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
         with:
           name: rateflix-server-deb
           path: ../rateflix-server_*.deb
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rateflix-plugin
+          path: ${{ steps.plugin.outputs.archive_name }}
