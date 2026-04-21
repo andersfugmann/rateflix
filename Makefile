@@ -62,6 +62,11 @@ plugin: ## Create the plugin directory via dune alias
 .PHONY: dist
 dist: plugin ## Backwards-compatible target; use `make plugin`
 
+.PHONY: deb
+deb: ## Build a Debian package
+deb:
+	dpkg-buildpackage -b -uc
+
 .PHONY: clean
 clean: ## Remove build and package artifacts
 clean:
