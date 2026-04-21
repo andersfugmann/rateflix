@@ -34,7 +34,7 @@ jobs:
           opam init --bare --yes --disable-sandboxing
           opam switch create 5.4.0 --yes
           eval $(opam env)
-          opam install . --deps-only --yes
+          opam install . --deps-only --with-test --yes
 
       - name: Build server binary
         run: |
