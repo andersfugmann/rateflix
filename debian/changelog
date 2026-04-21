@@ -1,3 +1,13 @@
+rateflix-server (0.2-1) unstable; urgency=medium
+
+  * Remove OMDb support, add configurable server host
+  * Simplify rating cache to session-scoped storage
+  * Simplify periodic IMDB refresh to use SIGHUP
+  * Refactor download codepaths into shared helper
+  * Change IMDB data refresh from weekly to daily
+
+ -- Anders Fugmann <anders@fugmann.net>  Tue, 21 Apr 2026 18:16:00 +0000
+
 rateflix-server (0.1-1) unstable; urgency=medium
 
   * Initial release.
